@@ -111,6 +111,7 @@ $config=Array
 	'image_recycl'=>1,
 	'tinyfilemanager'=>1,
 	'file_manage'=>1,
+	'delDir'=>'cache/',
 	'hide'=>0,
 	'hide_key'=>'EasyImage2.0',
 	'hide_path'=>0,

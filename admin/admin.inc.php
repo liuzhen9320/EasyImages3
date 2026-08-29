@@ -65,7 +65,7 @@ if (isset($_POST['update'])) {
     $postArr = filter_config_update($_POST, $config, $allowed_config_keys);
 
     $new_config = array_replace($config, $postArr);
-    unset($new_config['update'], $new_config['delDir'], $new_config['_csrf']);
+    unset($new_config['update'], $new_config['_csrf']);
     cache_write($config_file, $new_config);
     echo '
   <script>
