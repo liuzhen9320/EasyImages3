@@ -7,7 +7,7 @@
 
 > 状态说明：以下为第一轮 19 项修复完成后新确认的问题，均待修复。按“确认一项、立即记录一项”的方式持续补充。
 
-### 20. 严重 — `admin/filer.php` 可越出站点根目录且写操作无 CSRF
+### 20. 严重 — `admin/filer.php` 可越出站点根目录且写操作无 CSRF（已修复）
 
 **文件**: `admin/filer.php:22`, `admin/filer.php:83-90`, `admin/filer.php:627-634`, `admin/filer.php:678-884`, `admin/filer.php:955-958`
 
@@ -29,7 +29,7 @@ static function path_rtoa($path)
 
 **修复要求**：将文件管理根目录固定到配置的图片存储根；对每个源/目标路径做规范化和目录边界校验，拒绝 `..`、NUL 与符号链接逃逸；所有状态变更仅接受 POST 并统一校验 CSRF Token；移除 GET 写操作。考虑该文件管理器长期无人维护，优先评估删除 `admin/filer.php`，只保留已受限的 `admin/manager.php`。
 
-### 21. 严重 — 安装控制器可被无参数 GET 触发并锁定为公开默认凭据
+### 21. 严重 — 安装控制器可被无参数 GET 触发并锁定为公开默认凭据（已修复）
 
 **文件**: `install/contorl.php:4-31`, `config/config.php:13-16`, `app/function.php:289-297`
 
