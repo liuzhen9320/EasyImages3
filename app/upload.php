@@ -194,10 +194,10 @@ if ($handle->uploaded) {
             $imageUrl = str_replace($config['path'], '/', $imageUrl);
         }
 
-        // 源图保护 key值是由crc32加密的hide_key
-        // $hide_original = $config['hide'] == 1 ? $config['domain'] . '/app/hide.php?key=' . urlHash($pathIMG, 0, crc32($config['hide_key'])) : $imageUrl;
+        // 源图保护使用独立的 hide_key
+        // $hide_original = $config['hide'] == 1 ? $config['domain'] . '/app/hide.php?key=' . urlHash($pathIMG, 0, $config['hide_key']) : $imageUrl;
         if ($config['hide'] === 1) {
-            $imageUrl = $config['domain'] . '/app/hide.php?key=' . urlHash($pathIMG, 0, crc32($config['hide_key']));
+            $imageUrl = $config['domain'] . '/app/hide.php?key=' . urlHash($pathIMG, 0, $config['hide_key']);
         }
 
         // 删除文件链接

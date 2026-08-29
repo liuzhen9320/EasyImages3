@@ -614,16 +614,58 @@ function urlHash($data, $mode, $key = null)
 {
     global $config;
 
-    if (!$key) {
-        $key = crc32($config['password']);
+    $secret = $config['password'];
+    if ($key !== null && $key !== '') {
+        $secret .= "\0" . $key;
     }
 
-    $iv = 'sciCuBC7orQtDhTO';
+    $cipher = 'AES-256-CBC';
+    $ivLength = openssl_cipher_iv_length($cipher);
+    $keyMaterial = hash('sha512', "EasyImage:urlHash\0" . $secret, true);
+    $encryptionKey = substr($keyMaterial, 0, 32);
+    $authenticationKey = substr($keyMaterial, 32, 32);
+
     if ($mode) {
-        return openssl_decrypt(base64_decode($data), "AES-128-XTS", $key, 0, $iv);
-    } else {
-        return base64_encode(openssl_encrypt($data, "AES-128-XTS", $key, 0, $iv));
+        if (!is_string($data) || strpos($data, 'v2.') !== 0) {
+            return false;
+        }
+
+        $encoded = substr($data, 3);
+        $encoded .= str_repeat('=', (4 - strlen($encoded) % 4) % 4);
+        $payload = base64_decode(strtr($encoded, '-_', '+/'), true);
+        if ($payload === false || strlen($payload) <= $ivLength + 32) {
+            return false;
+        }
+
+        $message = substr($payload, 0, -32);
+        $providedMac = substr($payload, -32);
+        $expectedMac = hash_hmac('sha256', $message, $authenticationKey, true);
+        if (!hash_equals($expectedMac, $providedMac)) {
+            return false;
+        }
+
+        $iv = substr($message, 0, $ivLength);
+        $encrypted = substr($message, $ivLength);
+        return openssl_decrypt($encrypted, $cipher, $encryptionKey, OPENSSL_RAW_DATA, $iv);
     }
+
+    if (function_exists('random_bytes')) {
+        $iv = random_bytes($ivLength);
+    } else {
+        $iv = openssl_random_pseudo_bytes($ivLength);
+    }
+    if ($iv === false) {
+        return false;
+    }
+
+    $encrypted = openssl_encrypt($data, $cipher, $encryptionKey, OPENSSL_RAW_DATA, $iv);
+    if ($encrypted === false) {
+        return false;
+    }
+
+    $message = $iv . $encrypted;
+    $mac = hash_hmac('sha256', $message, $authenticationKey, true);
+    return 'v2.' . rtrim(strtr(base64_encode($message . $mac), '+/', '-_'), '=');
 }
 
 /**

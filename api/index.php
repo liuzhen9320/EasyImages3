@@ -138,9 +138,9 @@ if ($handle->uploaded) {
         if ($config['hide_path']) {
             $imageUrl = str_replace($config['path'], '/', $imageUrl);
         }
-        // 源图保护 key值是由crc32加密的hide_key
+        // 源图保护使用独立的 hide_key
         if ($config['hide']) {
-            $imageUrl = $config['domain'] . '/app/hide.php?key=' . urlHash($pathIMG, 0, crc32($config['hide_key']));
+            $imageUrl = $config['domain'] . '/app/hide.php?key=' . urlHash($pathIMG, 0, $config['hide_key']);
         }
         // 删除文件链接
         if ($config['show_user_hash_del']) {
