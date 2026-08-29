@@ -10,6 +10,10 @@ if (!$config['chart_on'] || !is_who_login('admin')) exit(header('Location: ' . $
 
 // 删除统计文件
 if (isset($_POST['del_total'])) {
+    if (!csrf_validate(isset($_POST['_csrf']) ? $_POST['_csrf'] : null)) {
+        http_response_code(403);
+        exit('Invalid CSRF token');
+    }
     @deldir(APP_ROOT . '/admin/logs/counts');
     echo '
 		<script>
@@ -66,6 +70,7 @@ if (is_array($char_data)) {
             <form action="chart.php" method="post">
                 <span>统计时间:<?php echo $char_data['total_time']; ?></span>
                 <input type="hidden" name="del_total" value="<?php echo APP_ROOT . '/admin/logs/counts/'; ?>">
+                <input type="hidden" name="_csrf" value="<?php echo htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>">
                 <button class="btn btn-mini btn-primary"><i class="icon icon-spin icon-refresh"></i>重新统计</button>
             </form>
         </div>
