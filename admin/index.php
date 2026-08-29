@@ -3,6 +3,7 @@
  * 登录页面
  */
 require_once __DIR__ . '/../app/function.php';
+ob_start();
 require_once APP_ROOT . '/app/header.php';
 require_once APP_ROOT . '/config/config.guest.php';
 
@@ -64,7 +65,7 @@ if (isset($_POST['password']) and isset($_POST['user'])) {
             </script>';
             exit(require_once APP_ROOT . '/app/footer.php');
         } else {
-            session_start();
+            csrf_session_start();
             if (strtolower($_REQUEST['code']) !== $_SESSION['code']) {
                 login_rate_limit($login_user, 'failure');
                 echo '
@@ -81,6 +82,11 @@ if (isset($_POST['password']) and isset($_POST['user'])) {
 
     $login = _login($login_user, $login_password);
     $login = json_decode($login, true);
+
+    if ($login['code'] == 200 && (!csrf_session_start() || !session_regenerate_id(true))) {
+        set_auth_cookie('', time() - 3600);
+        $login = array('code' => 400, 'level' => 0, 'messege' => '会话初始化失败，请重试');
+    }
 
     if ($login['code'] == 200) {
         login_rate_limit($login_user, 'reset');
