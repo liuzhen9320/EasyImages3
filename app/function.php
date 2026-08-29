@@ -1540,7 +1540,9 @@ function check_api($token)
         exit(json_encode($reJson, JSON_UNESCAPED_UNICODE));
     }
 
-    if (!in_array($tokenList[$token], $tokenList)) {
+    if (!is_string($token) || $token === '' || !is_array($tokenList) || !array_key_exists($token, $tokenList)
+        || !is_array($tokenList[$token]) || !isset($tokenList[$token]['expired'], $tokenList[$token]['id'])
+        || !is_numeric($tokenList[$token]['expired']) || !is_numeric($tokenList[$token]['id'])) {
         // Token 不存在
         $reJson = array(
             "result" => 'failed',
@@ -1550,7 +1552,7 @@ function check_api($token)
         exit(json_encode($reJson, JSON_UNESCAPED_UNICODE));
     }
 
-    if ($tokenList[$token]['expired'] < time()) {
+    if ((int) $tokenList[$token]['expired'] < time()) {
         // Token 过期
         $reJson = array(
             "result" => 'failed',
