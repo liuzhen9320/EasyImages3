@@ -1348,6 +1348,12 @@ class timthumb
             curl_setopt($curl, CURLOPT_WRITEFUNCTION, 'timthumb::curlWrite');
             @curl_setopt($curl, CURLOPT_FOLLOWLOCATION, true);
             @curl_setopt($curl, CURLOPT_MAXREDIRS, 10);
+            if (defined('CURLOPT_PROTOCOLS') && defined('CURLPROTO_HTTP') && defined('CURLPROTO_HTTPS')) {
+                curl_setopt($curl, CURLOPT_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
+            }
+            if (defined('CURLOPT_REDIR_PROTOCOLS') && defined('CURLPROTO_HTTP') && defined('CURLPROTO_HTTPS')) {
+                curl_setopt($curl, CURLOPT_REDIR_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
+            }
 
             $curlResult = curl_exec($curl);
             fclose(self::$curlFH);

@@ -1070,6 +1070,13 @@ function nsfwjs_json($url, $data = '')
     $params[CURLOPT_HEADER] = false; //是否返回响应头信息
     $params[CURLOPT_RETURNTRANSFER] = true; //是否将结果返回
     $params[CURLOPT_FOLLOWLOCATION] = true; //是否重定向
+    $params[CURLOPT_MAXREDIRS] = 5;
+    if (defined('CURLOPT_PROTOCOLS') && defined('CURLPROTO_HTTP') && defined('CURLPROTO_HTTPS')) {
+        $params[CURLOPT_PROTOCOLS] = CURLPROTO_HTTP | CURLPROTO_HTTPS;
+    }
+    if (defined('CURLOPT_REDIR_PROTOCOLS') && defined('CURLPROTO_HTTP') && defined('CURLPROTO_HTTPS')) {
+        $params[CURLOPT_REDIR_PROTOCOLS] = CURLPROTO_HTTP | CURLPROTO_HTTPS;
+    }
     $params[CURLOPT_TIMEOUT] = 30; //超时时间
     if (!empty($data)) {
         $params[CURLOPT_POST] = true;
