@@ -1,4 +1,9 @@
-<Files ~ ".php">
-Order allow,deny
-Deny from all
-</Files>
+<FilesMatch "(?i)\.(?:php\d*|phtml|pht|phar|phps|shtml|cgi|pl|py|sh)(?:\.|$)">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
