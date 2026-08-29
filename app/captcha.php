@@ -1,7 +1,6 @@
 <?php
-session_start(); //设置session
-
 require __DIR__ . "/function.php";
+csrf_session_start();
 
 //创建背景画布
 $img_w = 305;

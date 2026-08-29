@@ -21,22 +21,12 @@ require __DIR__ . '/config.php';
 // Is independent from IP white- and blacklisting
 $use_auth = false;
 
-// Login user name and password
-// Users: array('Username' => 'Password', 'Username2' => 'Password2', ...)
-// Generate secure password hash - https://tinyfilemanager.github.io/docs/pwd.html
-// 登录和管理密码 - Admin管理密码请在图床配置中修改
-$auth_users = array(
-    'admin' => password_hash($config['password'], PASSWORD_DEFAULT), // 登录密码
-    'user' => '$2y$10$iPtSuvQnv0FnqdWdQsuWMOGxlul/VQzcKl3q1K7VU/QTw102IU5yi' //密码：CQ4CdBGjGJnA 
-    // 先写一个密码然后获取密码Hash填上去- https://tinyfilemanager.github.io/docs/pwd.html
-);
+$auth_users = array();
 
 // Readonly users
 // e.g. array('users', 'guest', ...)
 // 只读的用户
-$readonly_users = array(
-    'user'
-);
+$readonly_users = array();
 
 // Enable highlight.js (https://highlightjs.org/) on view's page
 $use_highlightjs = true;

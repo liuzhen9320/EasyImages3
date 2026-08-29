@@ -82,7 +82,7 @@ User -> index.php (or admin/*.php)
 
 ### Config Storage Gotcha
 
-`admin/admin.inc.php` writes config using `cache_write()`, which does `file_put_contents($file, '<?php\n' . $var . '=' . var_export($data, true) . ';');`. This means the config files are **valid PHP** — any syntax error in user input can break the entire site. The password is stored as SHA-256 hex.
+`admin/admin.inc.php` writes config using `cache_write()`, which serializes arrays as PHP source. This means the config files are **valid PHP** — any syntax error in manually edited values can break the entire site. Passwords are stored with PHP's `password_hash()` format.
 
 ### Routing
 
@@ -99,17 +99,18 @@ User -> index.php (or admin/*.php)
 
 | Level | Check | Config |
 |-------|-------|--------|
-| Admin | `is_who_login('admin')` | `$config['user']` + SHA-256 `$config['password']` |
-| Logged-in status | `is_who_login('status')` | Cookie `auth` (JSON array `[username, hash]`) |
+| Admin | `is_who_login('admin')` | `$config['user']` + `password_verify()` |
+| Logged-in status | `is_who_login('status')` | Server-side PHP session |
 | Guest uploader | Array key exists in `$guestConfig` | `config/config.guest.php` |
 | API token | `check_api($token)` | `config/api_key.php` — `$tokenList[token]['expired']` |
 
-Auth is checked by `_login()` in `app/function.php:82`. Cookie expiry is tracked with `authTime` in the auth hash.
+Auth is checked by `_login()` in `app/function.php`. The browser only receives the random `easyimage_session` identifier; credentials and password hashes remain server-side.
 
 ### Important Auth Gotcha
 
-- `mustLogin` forces authentication before upload but uses `is_who_login()` which is cookie-based.
-- The guest uploader accounts in `config.guest.php` have passwords, expiry timestamps, and `add_time`.
+- `mustLogin` forces authentication before upload through the same server-side session.
+- The guest uploader accounts in `config.guest.php` have password hashes, expiry timestamps, and `add_time`.
+- Legacy 64-character SHA-256 password values are migrated to `password_hash()` after the next successful login.
 - There is a bug/gotcha in `admin/index.php:11`: `if ($_GET['login'] = 'logout')` uses **assignment** not comparison (`==`). This is intentional but looks like a bug — it will always evaluate as true.
 
 ---
@@ -297,8 +298,8 @@ No Makefile, no webpack, no build step. This is a traditional PHP application �
 ### 1. Login Assignment Bug
 `admin/index.php:11`: `if ($_GET['login'] = 'logout')` uses `=` not `==`. This is intentional and forces the logout branch to always execute when the parameter exists. Don't "fix" it.
 
-### 2. SHA-256 Password
-Passwords are stored as raw SHA-256 hex in `config.php` (not bcrypt/argon2). The hash is computed client-side in `admin/index.php:116` and also server-side. If you change the hashing algorithm, you must update both places.
+### 2. Password Authentication
+Login forms submit the password over HTTPS and `_login()` verifies it server-side. Installation, password changes, and recovery hashes must use `easyimage_password_hash()` so stored formats remain consistent.
 
 ### 3. Config File Format
 Config files are valid PHP written via `var_export()`. Editing them manually requires **valid PHP syntax** — a single broken quote will take down the site.

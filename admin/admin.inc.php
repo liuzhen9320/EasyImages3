@@ -186,7 +186,8 @@ if (isset($_POST['delete_guest'])) {
 if (isset($_POST['admin_form'])) {
     $admin_user = isset($_POST['user']) && is_string($_POST['user']) ? trim($_POST['user']) : '';
     $admin_password = isset($_POST['password']) && is_string($_POST['password']) ? $_POST['password'] : '';
-    if ($admin_user === '' || !preg_match('/^[a-f0-9]{64}$/i', $admin_password)) {
+    if (!preg_match('/\A[A-Za-z0-9_.-]{1,64}\z/D', $admin_user)
+        || strlen($admin_password) < 8 || strlen($admin_password) > 128) {
         http_response_code(400);
         exit('Invalid administrator credentials');
     }
@@ -201,10 +202,22 @@ if (isset($_POST['admin_form'])) {
         ';
         exit(header("refresh:3;"));
     }
-    $postArr = array('user' => $admin_user, 'password' => strtolower($admin_password));
+    $admin_password_hash = easyimage_password_hash($admin_password);
+    if ($admin_password_hash === false) {
+        http_response_code(500);
+        exit('Unable to hash administrator password');
+    }
+    $postArr = array('user' => $admin_user, 'password' => $admin_password_hash);
 
     $new_config = array_replace($config, $postArr);
-    cache_write($config_file, $new_config);
+    if (!cache_write($config_file, $new_config)) {
+        http_response_code(500);
+        exit('Unable to save administrator credentials');
+    }
+    $config = $new_config;
+    if (csrf_session_start()) {
+        unset($_SESSION['_auth']);
+    }
     echo '
     <script>
     new $.zui.Messager("保存成功", {
@@ -218,8 +231,17 @@ if (isset($_POST['admin_form'])) {
 
 // 添加上传账号 修改config.guest.php
 if (isset($_POST['uploader_form'])) {
+    $uploader_user = isset($_POST['uploader_user']) && is_string($_POST['uploader_user']) ? trim($_POST['uploader_user']) : '';
+    $uploader_password = isset($_POST['uploader_password']) && is_string($_POST['uploader_password']) ? $_POST['uploader_password'] : '';
+    $uploader_time = isset($_POST['uploader_time']) && is_string($_POST['uploader_time']) ? $_POST['uploader_time'] : '';
+    if (!preg_match('/\A[A-Za-z0-9_.-]{1,64}\z/D', $uploader_user)
+        || strlen($uploader_password) < 8 || strlen($uploader_password) > 128
+        || !ctype_digit($uploader_time) || (int) $uploader_time < 1 || (int) $uploader_time > 3650) {
+        http_response_code(400);
+        exit('Invalid uploader credentials');
+    }
     // 禁止与管理员登录名相同
-    if ($_POST['uploader_user'] == $config['user']) {
+    if ($uploader_user === $config['user']) {
         echo '
         <script>
         new $.zui.Messager("上传用户账号不能与管理员账号相同!", {
@@ -231,15 +253,24 @@ if (isset($_POST['uploader_form'])) {
         exit(header("refresh:3;"));
     }
     // 写入上传者用户数据
+    $uploader_password_hash = easyimage_password_hash($uploader_password);
+    if ($uploader_password_hash === false) {
+        http_response_code(500);
+        exit('Unable to hash uploader password');
+    }
     $postArr = array(
-        $_POST['uploader_user'] => array(
-            'password' => $_POST['uploader_password'],
-            'expired' => $_POST['uploader_time'] * 86400 + time(),
+        $uploader_user => array(
+            'password' => $uploader_password_hash,
+            'expired' => (int) $uploader_time * 86400 + time(),
             'add_time' => time()
         )
     );
     $new_config = array_replace($guestConfig, $postArr);
-    cache_write($guest_config_file, $new_config, 'guestConfig');
+    if (!cache_write($guest_config_file, $new_config, 'guestConfig')) {
+        http_response_code(500);
+        exit('Unable to save uploader credentials');
+    }
+    $guestConfig = $new_config;
     echo '
     <script>
     new $.zui.Messager("上传用户添加成功!", {
@@ -1128,7 +1159,7 @@ auto_delete(); //定时删除
         </div>
         <div class="tab-pane fade" id="Content10">
             <!-- 管理员账号 start-->
-            <form action="<?php echo $_SERVER['SCRIPT_NAME']; ?>" method="post" onsubmit="return md5_post()">
+            <form action="<?php echo $_SERVER['SCRIPT_NAME']; ?>" method="post">
                 <h5 class="header-dividing">管理员账号<small> 不更改账号或者密码就不要保存</small></h5>
                 <div class="col-md-12">
                     <div class="form-group col-md-4">
@@ -1139,8 +1170,7 @@ auto_delete(); //定时删除
                     </div>
                     <div class="form-group col-md-4">
                         <div class="input-control has-icon-left">
-                            <input type="text" name="password" id="password" class="form-control" value="" required="required" placeholder="更改管理密码" onkeyup="this.value=this.value.replace(/\s/g,'')">
-                            <input type="hidden" name="password" id="md5_password">
+                            <input type="password" name="password" id="password" class="form-control" value="" required="required" minlength="8" maxlength="128" autocomplete="new-password" placeholder="更改管理密码">
                             <label for="password" class="input-control-icon-left"><i class="icon icon-key"></i></label>
                         </div>
                     </div>
@@ -1158,12 +1188,12 @@ auto_delete(); //定时删除
                         <li>直接输入账号和密码即可完成修改</li>
                         <li>更改后会立即生效并重新登录,请务必牢记账号和密码! </li>
                         <li>如果忘记账号可以打开-><code>/config/config.php</code>文件->找到<code data-toggle="tooltip" title="'user'=><strong>admin</strong>'">user</code>对应的键值->填入</li>
-                        <li>如果忘记密码请将密码->转换成SHA256-><a href="<?php echo $config['domain'] . '/app/reset_password.php'; ?>" target="_blank" class="text-purple">转换网址</a>->打开<code>/config/config.php</code>文件->找到<code data-toggle="tooltip" title="'password'=>'<strong>e6e0612609</strong>'">password</code>对应的键值->填入</li>
+                        <li>如果忘记密码，可使用<a href="<?php echo $config['domain'] . '/app/reset_password.php'; ?>" target="_blank" class="text-purple">密码散列工具</a>生成新值，再替换<code>/config/config.php</code>中的<code>password</code>键值</li>
                     </ul>
                 </div>
             </div>
             <!-- 上传用户管理 start-->
-            <form action="<?php echo $_SERVER['SCRIPT_NAME']; ?>" method="post" onsubmit="return uploader_md5_post()">
+            <form action="<?php echo $_SERVER['SCRIPT_NAME']; ?>" method="post">
                 <h5 class="header-dividing">上传者账号<small> 账户只能用于上传</small></h5>
                 <div class="col-md-12">
                     <div class="form-group col-md-3">
@@ -1174,15 +1204,14 @@ auto_delete(); //定时删除
                     </div>
                     <div class="form-group col-md-3">
                         <div class="input-control has-icon-left">
-                            <input type="text" name="uploader_password" id="uploader_password" class="form-control" value="" required="required" autocomplete="off" placeholder="添加/更改 上传者密码" onkeyup="this.value=this.value.replace(/\s/g,'')">
-                            <input type="hidden" name="uploader_password" id="uploader_md5_password">
+                            <input type="password" name="uploader_password" id="uploader_password" class="form-control" value="" required="required" minlength="8" maxlength="128" autocomplete="new-password" placeholder="添加/更改 上传者密码">
                             <label for="password" class="input-control-icon-left"><i class="icon icon-key"></i></label>
                         </div>
                     </div>
                     <div class="form-group col-md-3">
                         <div class="input-group">
                             <span class="input-group-addon">有效期</span>
-                            <input type="number" class="form-control" name="uploader_time" value="30" id="uploader_time" placeholder="有效期 单位: 天" required="required">
+                            <input type="number" class="form-control" name="uploader_time" value="30" id="uploader_time" min="1" max="3650" placeholder="有效期 单位: 天" required="required">
                             <span class="input-group-addon">天</span>
                         </div>
                     </div>
@@ -1494,8 +1523,6 @@ auto_delete(); //定时删除
 </div>
 <link rel="stylesheet" href="<?php static_cdn(); ?>/public/static/zui/lib/datagrid/zui.datagrid.min.css">
 <link rel="stylesheet" href="<?php static_cdn(); ?>/public/static/zui/lib/datetimepicker/datetimepicker.min.css">
-<script type="application/javascript" src="<?php static_cdn(); ?>/public/static/crypto/SHA256.js"></script>
-<script type="application/javascript" src="<?php static_cdn(); ?>/public/static/crypto/SHA256.js"></script>
 <script type="application/javascript" src="<?php static_cdn(); ?>/public/static/jscolor/jscolor.min.js"></script>
 <script type="application/javascript" src="<?php static_cdn(); ?>/public/static/zui/lib/datagrid/zui.datagrid.min.js"></script>
 <script type="application/javascript" src="<?php static_cdn(); ?>/public/static/zui/lib/datetimepicker/datetimepicker.min.js"></script>
@@ -1609,23 +1636,6 @@ auto_delete(); //定时删除
     if ($.zui.store.pageGet('data-tab-now') == null) {
         $("a[href = '#Content1']").parent().addClass("active in")
         $('#Content1').addClass("active in")
-    }
-
-    // 账号密码 | 以md5加密方式发送
-    function uploader_md5_post() {
-        var password = document.getElementById('uploader_password');
-        var md5pwd = document.getElementById('uploader_md5_password');
-        md5pwd.value = SHA256(password.value);
-        //可以校验判断表单内容,true就是通过提交,false,阻止提交
-        return true;
-    }
-    // 账号密码 | 以md5加密方式发送
-    function md5_post() {
-        var password = document.getElementById('password');
-        var md5pwd = document.getElementById('md5_password');
-        md5pwd.value = SHA256(password.value);
-        //可以校验判断表单内容,true就是通过提交,false,阻止提交
-        return true;
     }
 
     // 动态显示要删除的图片
@@ -1754,7 +1764,7 @@ auto_delete(); //定时删除
                     width: 0.1
                 },
                 {
-                    label: '密码 (SHA256)',
+                    label: '密码散列',
                     name: 'password',
                     html: true,
                     width: 0.2

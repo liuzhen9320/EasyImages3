@@ -220,19 +220,21 @@ if (defined('FM_EMBED')) {
         mb_regex_encoding('UTF-8');
     }
 
-    session_cache_limiter('');
-    session_name(FM_SESSION_ID );
-    function session_error_handling_function($code, $msg, $file, $line) {
-        // Permission denied for default session, try to create a new one
-        if ($code == 2) {
-            session_abort();
-            session_id(session_create_id());
-            @session_start();
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+        session_cache_limiter('');
+        session_name(FM_SESSION_ID );
+        function session_error_handling_function($code, $msg, $file, $line) {
+            // Permission denied for default session, try to create a new one
+            if ($code == 2) {
+                session_abort();
+                session_id(session_create_id());
+                @session_start();
+            }
         }
+        set_error_handler('session_error_handling_function');
+        session_start();
+        restore_error_handler();
     }
-    set_error_handler('session_error_handling_function');
-    session_start();
-    restore_error_handler();
 }
 
 if (empty($auth_users)) {

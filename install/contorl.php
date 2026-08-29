@@ -36,7 +36,7 @@ if ($password !== $_POST['repassword'] || strlen($password) < 8 || strlen($passw
     install_error('两次密码必须一致，长度应为 8 至 128 位。', 422);
 }
 
-$passwordHash = password_hash($password, PASSWORD_DEFAULT);
+$passwordHash = easyimage_password_hash($password);
 if ($passwordHash === false) {
     install_error('管理员密码散列失败。', 500);
 }
