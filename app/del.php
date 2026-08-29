@@ -113,7 +113,7 @@ if (isset($_POST['recycle_url_array'])) {
     }
 }
 
-if (isset($_POST['url'])) $postURL = strip_tags($_POST['url']);
+$postURL = isset($_POST['url']) && is_string($_POST['url']) ? strip_tags($_POST['url']) : null;
 
 // 广场|日志 - 单文件删除
 if (isset($_POST['mode']) && $_POST['mode'] === 'delete') {
@@ -254,8 +254,8 @@ if (isset($_POST['mode']) && $_POST['mode'] === 'suspic_reimg') {
 // 管理页面 - 删除非空目录
 if (isset($_POST['mode']) && $_POST['mode'] === 'delDir') {
     try {
-        $delDir = APP_ROOT . $config['path'] . $postURL; // 限制删除目录
-        if (deldir($delDir)) {
+        $delDir = resolve_directory_within(APP_ROOT . $config['path'], $postURL);
+        if ($delDir !== false && deldir($delDir)) {
             $re = json_encode(array(
                 'code' => 200,
                 'msg'  => '删除文件夹成功',
@@ -283,8 +283,8 @@ if (isset($_POST['mode']) && $_POST['mode'] === 'delDir') {
 
 // 管理页面 - 删除指定日期文件夹
 if (isset($_POST['dateDir'])) {
-    $delDir = APP_ROOT . $config['path'] . $_POST['dateDir'];
-    if (deldir($delDir)) {
+    $delDir = resolve_directory_within(APP_ROOT . $config['path'], $_POST['dateDir']);
+    if ($delDir !== false && deldir($delDir)) {
         echo json_encode(array(
             'code' => 200,
             'msg'  => '删除成功',

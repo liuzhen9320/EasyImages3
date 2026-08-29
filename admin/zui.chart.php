@@ -15,7 +15,7 @@ if (!is_who_login('admin')) {
 }
 // 删除统计文件
 if (isset($_POST['del_total'])) {
-    @deldir($_POST['del_total']);
+    @deldir(APP_ROOT . '/admin/logs/counts');
     echo '
 		<script>
 		new $.zui.Messager("重新统计成功!", {

@@ -901,23 +901,51 @@ function getVersion($name = 'tag_name')
  */
 function deldir($dir)
 {
-    if (file_exists($dir)) {
-        $files = scandir($dir);
-        foreach ($files as $file) {
-            if ($file != '.' && $file != '..') {
-                $path = $dir . '/' . $file;
-                if (is_dir($path)) {
-                    deldir($path);
-                } else {
-                    unlink($path);
-                }
-            }
-        }
-        rmdir($dir);
-        return true;
-    } else {
+    if (!is_dir($dir) || is_link($dir)) {
         return false;
     }
+
+    $files = scandir($dir);
+    foreach ($files as $file) {
+        if ($file === '.' || $file === '..') {
+            continue;
+        }
+
+        $path = $dir . DIRECTORY_SEPARATOR . $file;
+        if (is_link($path) || is_file($path)) {
+            if (!unlink($path)) {
+                return false;
+            }
+        } elseif (is_dir($path) && !deldir($path)) {
+            return false;
+        }
+    }
+
+    return rmdir($dir);
+}
+
+/**
+ * Resolve an existing child directory without allowing traversal or root deletion.
+ */
+function resolve_directory_within($baseDir, $relativeDir)
+{
+    if (!is_string($relativeDir) || strpos($relativeDir, "\0") !== false) {
+        return false;
+    }
+
+    $base = realpath($baseDir);
+    if ($base === false || !is_dir($base)) {
+        return false;
+    }
+
+    $relativeDir = ltrim(str_replace('\\', '/', $relativeDir), '/');
+    $target = realpath($base . DIRECTORY_SEPARATOR . $relativeDir);
+    $prefix = rtrim($base, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
+    if ($target === false || $target === $base || strpos($target, $prefix) !== 0 || !is_dir($target)) {
+        return false;
+    }
+
+    return $target;
 }
 
 /**
