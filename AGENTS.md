@@ -177,6 +177,7 @@ Always use `JSON_UNESCAPED_UNICODE` when returning JSON containing Chinese text.
 - Folder path pattern: `Y/m/d/`, `Y-m-d/`, or custom
 - Hidden path mode: `config_path()` in `function.php` applies `hide_path` logic — obfuscated via `urlHash()` with `$config['hide_key']`
 - Delete and recycle operations must pass through `normalize_storage_web_path()` and `resolve_storage_file()` before local or FTP mutations
+- Protected image tokens are authenticated by `urlHash()`, then independently constrained to storage by `resolve_storage_file()`
 
 ### Image Validation
 

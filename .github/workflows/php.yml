@@ -56,3 +56,6 @@ jobs:
 
       - name: Test log viewer path containment
         run: bash tests/log_viewer_path_containment.sh
+
+      - name: Test protected image path containment
+        run: bash tests/protected_image_path_containment.sh

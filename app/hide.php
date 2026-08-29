@@ -9,15 +9,14 @@
 
 require_once __DIR__ . '/function.php';
 
-if (isset($_GET['key'])) {
-    $hide_original = $_GET['key'];
-    $real_path = APP_ROOT . urlHash($hide_original, 1, $config['hide_key']);
-} else {
-    $real_path = APP_ROOT . '/public/images/404.png';
+$real_path = false;
+if (isset($_GET['key']) && is_string($_GET['key'])) {
+    $hidden_path = urlHash($_GET['key'], 1, $config['hide_key']);
+    $real_path = resolve_storage_file($hidden_path);
 }
 
-// 文件不存在
-if (!is_file($real_path)) {
+if ($real_path === false) {
+    http_response_code(404);
     $real_path = APP_ROOT . '/public/images/404.png';
 }
 
@@ -25,7 +24,7 @@ if (!is_file($real_path)) {
 $ex = pathinfo($real_path, PATHINFO_EXTENSION);
 
 // 设置头
-header("Content-Type: image/" . $ex . ";text/html; charset=utf-8");
+header('Content-Type: image/' . $ex);
 
 //输出文件
 echo file_get_contents($real_path);
