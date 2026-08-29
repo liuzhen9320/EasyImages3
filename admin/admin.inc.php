@@ -21,7 +21,7 @@ if (!is_who_login('admin')) {
 	type: "danger", // 定义颜色主题 
 	icon: "exclamation-sign" // 定义消息图标
   }).show();</script>';
-    header("refresh:2;url=" . $config['domain'] . "/admin/index.php");
+    send_redirect($config['domain'] . '/admin/index.php', 2);
     require_once APP_ROOT . '/app/footer.php';
     exit;
 }

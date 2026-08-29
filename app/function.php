@@ -108,6 +108,47 @@ function set_auth_cookie($value, $expires)
 }
 
 /**
+ * Validate a URL before placing it in a Location or Refresh response header.
+ */
+function safe_redirect_url($url, $fallback = '/')
+{
+    if (!is_string($url) || $url === '' || preg_match('/[\x00-\x20\x7f]/', $url) || strpos($url, '\\') !== false) {
+        return $fallback;
+    }
+
+    if (preg_match('#^https?://#i', $url)) {
+        $parts = parse_url($url);
+        if (filter_var($url, FILTER_VALIDATE_URL) !== false && is_array($parts)
+            && isset($parts['scheme'], $parts['host']) && in_array(strtolower($parts['scheme']), array('http', 'https'), true)) {
+            return $url;
+        }
+        return $fallback;
+    }
+
+    if (strpos($url, '//') === 0 || preg_match('/^[a-z][a-z0-9+.-]*:/i', $url)) {
+        return $fallback;
+    }
+
+    return $url;
+}
+
+/**
+ * Send a validated immediate or delayed redirect header.
+ */
+function send_redirect($url, $delay = null, $status = 302)
+{
+    $url = safe_redirect_url($url);
+    if ($delay !== null) {
+        $delay = max(0, min(300, (int) $delay));
+        header('Refresh: ' . $delay . '; url=' . $url);
+        return;
+    }
+
+    $status = in_array((int) $status, array(301, 302, 303, 307, 308), true) ? (int) $status : 302;
+    header('Location: ' . $url, true, $status);
+}
+
+/**
  * Keep configuration updates inside the settings form's explicit field list.
  */
 function filter_config_update($post, $current, $allowedKeys)
@@ -349,7 +390,7 @@ function mustLogin()
                 icon: "bullhorn" // 定义消息图标
             }).show();
             </script>';
-            header("refresh:2;url=" . $config['domain'] . "/admin/index.php");
+            send_redirect($config['domain'] . '/admin/index.php', 2);
         }
     }
 }

@@ -8,7 +8,7 @@ require_once __DIR__ . '/../app/function.php';
 if(!is_who_login('admin')){
     require_once APP_ROOT.'/app/header.php';
     echo '<div class="alert alert-danger">还没有登陆哦~~</div>';
-    header("refresh:3;url=" . $config['domain'] . "/admin/index.php");
+    send_redirect($config['domain'] . '/admin/index.php', 3);
     require_once APP_ROOT.'/app/footer.php';
     exit;
 }
@@ -17,7 +17,8 @@ if(!is_who_login('admin')){
 if (!$config['file_manage']) {
     require_once APP_ROOT.'/app/header.php';
     echo '<div class="alert alert-danger">图片管理已关闭~~</div>';
-    header("refresh:3;url=" . $_SERVER["HTTP_REFERER"] . '?manager-closed');
+    $referer = isset($_SERVER['HTTP_REFERER']) ? $_SERVER['HTTP_REFERER'] : $config['domain'];
+    send_redirect($referer . '?manager-closed', 3);
     require_once APP_ROOT.'/app/footer.php';
     exit;
 }
@@ -254,7 +255,8 @@ $root_url = fm_clean_path($root_url);
 
 // abs path for site
 defined('FM_ROOT_URL') || define('FM_ROOT_URL', ($is_https ? 'https' : 'http') . '://' . $http_host . (!empty($root_url) ? '/' . $root_url : ''));
-defined('FM_SELF_URL') || define('FM_SELF_URL', ($is_https ? 'https' : 'http') . '://' . $http_host . $_SERVER['PHP_SELF']);
+$manager_self = isset($_SERVER['PHP_SELF']) ? safe_redirect_url($_SERVER['PHP_SELF'], '/admin/manager.php') : '/admin/manager.php';
+defined('FM_SELF_URL') || define('FM_SELF_URL', $manager_self);
 
 // logout
 if (isset($_GET['logout'])) {
@@ -2416,7 +2418,7 @@ function fm_get_mime_type($file_path)
  */
 function fm_redirect($url, $code = 302)
 {
-    header('Location: ' . $url, true, $code);
+    send_redirect($url, null, $code);
     exit;
 }
 

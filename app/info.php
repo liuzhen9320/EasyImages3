@@ -1,7 +1,10 @@
 <?php
 include_once __DIR__ . "/header.php";
 
-if (!$config['show_exif_info'] && !is_who_login('admin')) exit(header('Location: ' . $config['domain'] . '?exif#closed'));
+if (!$config['show_exif_info'] && !is_who_login('admin')) {
+    send_redirect($config['domain'] . '?exif#closed');
+    exit;
+}
 
 // 获取图片地址
 if (isset($_GET['img'])) {

@@ -12,7 +12,7 @@ require_once __DIR__ . '/../config/config.php';
 if (!$config['file_manage']) {
     require_once APP_ROOT . '/app/header.php';
     echo '<h4 class="alert alert-danger">文件管理已关闭~~</h4>';
-    header("refresh:3;url=" . $config['domain'] . '?manag-closed');
+    send_redirect($config['domain'] . '?manag-closed', 3);
     exit(require_once APP_ROOT . '/app/footer.php');
 }
 /**结束 - 自定义修改 */

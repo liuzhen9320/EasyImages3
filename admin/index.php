@@ -13,7 +13,7 @@ if (isset($_GET['login'])) {
 
         if (isset($_COOKIE['auth'])) {
             set_auth_cookie('', time() - 3600);
-            header("Refresh:2;url=../index.php");
+            send_redirect('../index.php', 2);
             echo '
 				<script>
 					new $.zui.Messager("退出成功", {
@@ -97,7 +97,7 @@ if (isset($_POST['password']) and isset($_POST['user'])) {
             icon: "check" // 定义消息图标
             }).show();
         </script>';
-        header("refresh:2;url=" . $config['domain'] . "");
+        send_redirect($config['domain'], 2);
     } else {
         login_rate_limit($login_user, 'failure');
         echo '
