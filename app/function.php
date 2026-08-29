@@ -4,6 +4,37 @@ require_once __DIR__ . '/WaterMask.php';
 require_once APP_ROOT . '/config/config.guest.php';
 
 /**
+ * Accept static SVG markup while rejecting executable or externally loaded content.
+ */
+function is_safe_svg($svg)
+{
+    if (!is_string($svg) || $svg === '' || strpos($svg, "\0") !== false || !preg_match('//u', $svg)) {
+        return false;
+    }
+
+    $svg = preg_replace('/^\xEF\xBB\xBF/', '', $svg);
+    if (!preg_match('/\A\s*(?:<\?xml\s[^?]*\?>\s*)?(?:<!--[\s\S]*?-->\s*)*<svg(?:\s|>)/i', $svg)
+        || !preg_match('/<\/svg\s*>\s*\z/i', $svg)) {
+        return false;
+    }
+
+    $blockedElements = 'script|handler|listener|foreignObject|iframe|frame|frameset|object|embed|applet|audio|video|image|use|a|style|link|meta|base|form|input|button|textarea|select|option|animate|animateMotion|animateTransform|set';
+    if (preg_match('/<\s*\/?\s*(?:[a-z][a-z0-9_.-]*:)?(?:' . $blockedElements . ')\b/i', $svg)) {
+        return false;
+    }
+
+    if (preg_match('/<\s*!\s*(?:DOCTYPE|ENTITY)\b/i', $svg)
+        || preg_match('/<\?(?!xml\s)/i', $svg)
+        || preg_match('/\s(?:on[a-z0-9_.:-]*|href|xlink:href|style|src|formaction|xml:base)\s*=/i', $svg)
+        || preg_match('/(?:javascript|vbscript|data)\s*:/i', $svg)
+        || preg_match('/url\s*\(\s*(?!["\']?#)/i', $svg)) {
+        return false;
+    }
+
+    return true;
+}
+
+/**
  * Start the session used for administrator CSRF protection.
  */
 function csrf_session_start()
