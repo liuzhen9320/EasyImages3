@@ -92,7 +92,7 @@ if (isset($_POST['password']) and isset($_POST['user'])) {
     }
 
     // 登录日志
-    write_login_log($_POST['user'], $_POST['password'], $login["messege"]);
+    write_login_log($_POST['user'], $login["messege"]);
 }
 ?>
 <link rel="stylesheet" href="<?php static_cdn(); ?>/public/static/login.css">

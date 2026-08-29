@@ -1741,10 +1741,9 @@ function auto_delete()
 /**
  * 登录日志
  * @param String $user 用户
- * @param String $pass 密码
  * @param String $msg  提示
  */
-function write_login_log($user, $pass, $msg)
+function write_login_log($user, $msg)
 {
     $log_path = APP_ROOT . '/admin/logs/login/';
     $log_file = $log_path . date('/Y-m-') . 'logs.php';
@@ -1754,7 +1753,7 @@ function write_login_log($user, $pass, $msg)
     if (!is_file($log_file)) file_put_contents($log_file, '<?php /** 登录日志 */ exit; ?>' . PHP_EOL, FILE_APPEND | LOCK_EX);
 
     /** 写入日志 */
-    $log = htmlentities(date('Y-m-d H:i:s') . ' IP: ' . real_ip() . ' 账号: ' . $user . ' 密码: ' .  $pass . ' 提示: ' . $msg);
+    $log = htmlentities(date('Y-m-d H:i:s') . ' IP: ' . real_ip() . ' 账号: ' . $user . ' 提示: ' . $msg);
     file_put_contents($log_file, $log . PHP_EOL, FILE_APPEND | LOCK_EX);
 }
 
