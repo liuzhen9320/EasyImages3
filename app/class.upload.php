@@ -1899,6 +1899,11 @@ class Upload {
         $this->forbidden = array_merge($this->dangerous, array(
             'exe',
             'dll',
+            'svg',
+            'svgz',
+            'image/svg+xml',
+            'image/svg',
+            'application/svg+xml',
         ));
         
         $this->allowed = array(

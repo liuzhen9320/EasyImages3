@@ -126,7 +126,7 @@ Auth is checked by `_login()` in `app/function.php`. The browser only receives t
 5. Check daily upload limit for guests (`ip_upload_counts`)
 6. Optionally handle chunked upload (`$config['chunks']`)
 7. Instantiate `new Upload($_FILES['file'], 'zh_CN')` (Verot\Upload namespace)
-8. Process: validate MIME type, check SVG for XSS, rename file, apply watermark, compress, thumbnail
+8. Process: validate MIME type, reject SVG, rename file, apply watermark, compress, thumbnail
 9. Return JSON: `{result, code, url, thumb, del, srcName}`
 
 ### API Upload (`api/index.php`)
@@ -143,7 +143,7 @@ Same pipeline but:
 |------|---------|
 | 200 | Success |
 | 204 | No file selected |
-| 205 | IP blocked, SVG XSS, file exists |
+| 205 | IP blocked, file exists |
 | 401 | Login required |
 | 403 | Sign expired |
 | 406 | File too large |
@@ -181,7 +181,7 @@ Always use `JSON_UNESCAPED_UNICODE` when returning JSON containing Chinese text.
 
 - MIME type filtering via `$handle->allowed = array('image/*')`
 - Dimension limits: `minWidth`/`minHeight`, `maxWidth`/`maxHeight`
-- SVG XSS check: scans for `<script>` and `href=`
+- SVG uploads are rejected by extension, MIME type, and file content
 - Animated GIF/WebP detection: `is_Gif_Webp_Animated()` — animated images skip compression and thumbnail operations
 
 ### Compression
@@ -243,7 +243,7 @@ This overwrites the entire config file. Any missing keys from the form will be l
 | `image_recycl` | bool | 1 | Enable recycle bin (images moved to `recycle/` subdirectory) |
 | `chunks` | int | 0 | Chunk size for upload (0 = disabled) |
 | `storage_path` | string | `Y/m/d/` | Date-based folder structure |
-| `extensions` | string | `jpg,jpeg,png,gif,bmp,webp,ico,jfif,tif,tga,svg` | Allowed extensions |
+| `extensions` | string | `jpg,jpeg,png,gif,bmp,webp,ico,jfif,tif,tga` | Allowed extensions (SVG is always disabled) |
 | `maxSize` | int | 10485760 | Max file size (bytes) |
 | `timezone` | string | `Asia/Shanghai` | PHP timezone |
 

@@ -635,9 +635,10 @@ if (isset($_POST['ajax']) && !FM_READONLY) {
         $fileinfo = new stdClass();
         $fileinfo->name = trim(basename($url), ".\x00..\x20");
 
-        $allowed = (FM_UPLOAD_EXTENSION) ? explode(',', FM_UPLOAD_EXTENSION) : false;
+        $allowed = (FM_UPLOAD_EXTENSION) ? explode(',', strtolower(FM_UPLOAD_EXTENSION)) : false;
         $ext = strtolower(pathinfo($fileinfo->name, PATHINFO_EXTENSION));
-        $isFileAllowed = ($allowed) ? in_array($ext, $allowed) : true;
+        $isFileAllowed = (($allowed) ? in_array($ext, $allowed, true) : true)
+            && !is_forbidden_svg_upload($fileinfo->name);
 
         $err = false;
 
@@ -670,6 +671,15 @@ if (isset($_POST['ajax']) && !FM_READONLY) {
             if (!$success) {
                 $err = error_get_last();
             }
+        }
+
+        if ($success && is_forbidden_svg_upload(
+            $fileinfo->name,
+            isset($fileinfo->type) ? $fileinfo->type : '',
+            $temp_file
+        )) {
+            $success = false;
+            $err = array("message" => "SVG uploads are not allowed");
         }
 
         if ($success) {
@@ -939,7 +949,7 @@ if (!empty($_FILES) && !FM_READONLY) {
 
     $errors = 0;
     $uploads = 0;
-    $allowed = (FM_UPLOAD_EXTENSION) ? explode(',', FM_UPLOAD_EXTENSION) : false;
+    $allowed = (FM_UPLOAD_EXTENSION) ? explode(',', strtolower(FM_UPLOAD_EXTENSION)) : false;
     $response = array (
         'status' => 'error',
         'info'   => 'Oops! Try again'
@@ -948,7 +958,11 @@ if (!empty($_FILES) && !FM_READONLY) {
     $filename = $f['file']['name'];
     $tmp_name = $f['file']['tmp_name'];
     $ext = pathinfo($filename, PATHINFO_FILENAME) != '' ? strtolower(pathinfo($filename, PATHINFO_EXTENSION)) : '';
-    $isFileAllowed = ($allowed) ? in_array($ext, $allowed) : true;
+    $uploadMime = isset($f['file']['type']) && is_string($f['file']['type']) ? $f['file']['type'] : '';
+    $targetName = isset($_REQUEST['fullpath']) && is_string($_REQUEST['fullpath']) ? basename($_REQUEST['fullpath']) : '';
+    $isFileAllowed = (($allowed) ? in_array($ext, $allowed, true) : true)
+        && !is_forbidden_svg_upload($filename, $uploadMime, $tmp_name)
+        && !is_forbidden_svg_upload($targetName);
 
     if(!fm_isvalid_filename($filename) && !fm_isvalid_filename($_REQUEST['fullpath'])) {
         $response = array (
@@ -1008,7 +1022,15 @@ if (!empty($_FILES) && !FM_READONLY) {
 
 
                 if ($chunkIndex == $chunkTotal - 1) {
-                    rename("{$fullPath}.part", $fullPath);
+                    if (is_forbidden_svg_upload($fullPath, '', "{$fullPath}.part")) {
+                        @unlink("{$fullPath}.part");
+                        $response = array(
+                            'status' => 'error',
+                            'info' => 'SVG uploads are not allowed'
+                        );
+                    } else {
+                        rename("{$fullPath}.part", $fullPath);
+                    }
                 }
 
             } else if (move_uploaded_file($tmp_name, $fullPath)) {
@@ -2348,10 +2370,14 @@ function fm_rchmod($path, $filemode, $dirmode)
  */
 function fm_is_valid_ext($filename)
 {
-    $allowed = (FM_FILE_EXTENSION) ? explode(',', FM_FILE_EXTENSION) : false;
+    if (is_forbidden_svg_upload($filename)) {
+        return false;
+    }
 
-    $ext = pathinfo($filename, PATHINFO_EXTENSION);
-    $isFileAllowed = ($allowed) ? in_array($ext, $allowed) : true;
+    $allowed = (FM_FILE_EXTENSION) ? explode(',', strtolower(FM_FILE_EXTENSION)) : false;
+
+    $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+    $isFileAllowed = ($allowed) ? in_array($ext, $allowed, true) : true;
 
     return ($isFileAllowed) ? true : false;
 }
@@ -2364,7 +2390,7 @@ function fm_is_valid_ext($filename)
  */
 function fm_rename($old, $new)
 {
-    $isFileAllowed = fm_is_valid_ext($new);
+    $isFileAllowed = is_dir($old) || fm_is_valid_ext($new);
 
     if(!$isFileAllowed) return false;
 

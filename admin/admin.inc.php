@@ -63,6 +63,9 @@ if (isset($_POST['update'])) {
         'upload_logs', 'waterImg', 'waterPosition', 'waterText', 'watermark'
     );
     $postArr = filter_config_update($_POST, $config, $allowed_config_keys);
+    if (isset($postArr['extensions'])) {
+        $postArr['extensions'] = sanitize_upload_extensions($postArr['extensions']);
+    }
 
     $new_config = array_replace($config, $postArr);
     unset($new_config['update'], $new_config['_csrf']);
@@ -395,7 +398,7 @@ auto_delete(); //定时删除
                     </div> -->
                     <div class="form-group col-md-3">
                         <label data-toggle="tooltip" title="请以英文 , 分割 最后一个不加 , <br/>非图片格式需在图床安全中关闭图床模式">允许的扩展名 | 非图片格式?</label>
-                        <input type="text" class="form-control" name="extensions" required="required" value="<?php echo $config['extensions']; ?>" onkeyup="this.value=this.value.replace(/\s/g,'')">
+                        <input type="text" class="form-control" name="extensions" required="required" value="<?php echo htmlspecialchars(getExtensions(), ENT_QUOTES, 'UTF-8'); ?>" onkeyup="this.value=this.value.replace(/\s/g,'')">
                     </div>
                     <div class="form-group col-md-2">
                         <label>上传文件的命名方式</label>

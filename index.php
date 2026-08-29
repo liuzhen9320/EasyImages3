@@ -144,7 +144,7 @@ mustLogin();
     filters: { // 只允许上传图片或图标（.ico）
       mime_types: [{
           title: '图片',
-          extensions: '<?php echo $config['extensions']; ?>'
+          extensions: '<?php echo htmlspecialchars(getExtensions(), ENT_QUOTES, 'UTF-8'); ?>'
         },
         {
           title: '图标',

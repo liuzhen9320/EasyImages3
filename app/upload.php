@@ -78,6 +78,9 @@ if ($config['ip_upload_counts'] > 0 && !is_who_login('status')) {
 // 分片上传
 if ($config['chunks']) {
     $targetName = isset($_POST['name']) && is_string($_POST['name']) ? $_POST['name'] : '';
+    if (is_forbidden_svg_upload($targetName)) {
+        exit(json_encode(array("result" => "failed", "code" => 415, "message" => "不支持 SVG 格式"), JSON_UNESCAPED_UNICODE));
+    }
     $uploadIdentity = isset($_POST['_upload_id']) && is_string($_POST['_upload_id']) ? $_POST['_upload_id'] : '';
     $chunk = csrf_validate($uploadIdentity) ? chunk($targetName, 'file', $uploadIdentity) : false;
     if ($chunk === false) {
@@ -97,19 +100,12 @@ if ($handle->uploaded) {
         $handle->allowed = array('image/*');
     }
 
-    // SVG仅允许不含脚本、外部资源或交互能力的静态内容
-    if (strtolower($handle->file_src_name_ext) === 'svg') {
-        $svg = file_get_contents($handle->file_src_pathname);
-        if (!is_safe_svg($svg)) {
-            exit(json_encode(
-                array(
-                    "result"  => "failed",
-                    "code"    => 406,
-                    "message" => "请勿上传非法文件",
-                ),
-                JSON_UNESCAPED_UNICODE
-            ));
-        }
+    if (is_forbidden_svg_upload($handle->file_src_name, $handle->file_src_mime, $handle->file_src_pathname)) {
+        $handle->clean();
+        exit(json_encode(
+            array("result" => "failed", "code" => 415, "message" => "不支持 SVG 格式"),
+            JSON_UNESCAPED_UNICODE
+        ));
     }
 
     // 文件命名

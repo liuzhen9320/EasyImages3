@@ -231,7 +231,7 @@ $delDir = APP_ROOT . $config['path'] . $_REQUEST['delDir'];
 
 `delDir` 无任何路径校验，可删除 `i/` 目录下的任意子目录。
 
-### 9. SVG 上传 XSS 过滤不完整
+### 9. SVG 上传 XSS 过滤不完整（已修复）
 
 **文件**: `app/upload.php:96`, `api/index.php:66`
 
@@ -240,6 +240,8 @@ preg_match('/<script[\s\S]*?<\/script>/', $svg) || stripos($svg, 'href=')
 ```
 
 仅检测 `<script>` 标签和 `href=`。事件处理器如 `<svg onload="alert(1)">`、`<foreignObject>` 内部 HTML/JS 可绕过。
+
+**修复状态**：不再尝试净化 SVG。默认配置、浏览器允许列表、普通上传、API、分片上传和后台文件管理器均禁用 SVG；服务端同时检查扩展名、MIME 与文件内容，避免大小写、旧配置和伪装扩展名绕过。回归测试覆盖上游 issue #260 的 `onload` 样例、伪装 JPEG、配置持久化与正常 PNG 上传。
 
 ---
 

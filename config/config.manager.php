@@ -74,12 +74,12 @@ $datetime_format = 'Y.m.d H:i:s';
 // Allowed file extensions for create and rename files
 // e.g. 'txt,html,css,js'
 // 允许创建的文件格式
-$allowed_file_extensions = '';
+$allowed_file_extensions = getExtensions();
 
 // Allowed file extensions for upload files
 // e.g. 'gif,png,jpg,html,txt'
 // 允许上传的文件格式
-$allowed_upload_extensions = '';
+$allowed_upload_extensions = getExtensions();
 
 // Favicon path. This can be either a full url to an .PNG image, or a path based on the document root.
 // full path, e.g http://example.com/favicon.png

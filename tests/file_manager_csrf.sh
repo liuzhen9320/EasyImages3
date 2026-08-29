@@ -12,7 +12,7 @@ cookie_jar="$test_root/cookies.txt"
 manager_page="$test_root/manager.html"
 response_page="$test_root/response.txt"
 password='Manager-CSRF-2026!'
-target_name='manager-csrf-test.txt'
+target_name='manager-csrf-test.jpg'
 upload_name='manager-upload-test.jpg'
 
 php -r 'require $argv[1] . "/app/function.php"; $config["domain"] = $argv[2]; $config["imgurl"] = $argv[2]; $config["user"] = "admin"; $config["password"] = easyimage_password_hash($argv[3]); $config["file_manage"] = 1; if (!cache_write($argv[1] . "/config/config.php", $config)) { exit(1); }' \

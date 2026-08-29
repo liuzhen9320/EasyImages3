@@ -4,34 +4,70 @@ require_once __DIR__ . '/WaterMask.php';
 require_once APP_ROOT . '/config/config.guest.php';
 
 /**
- * Accept static SVG markup while rejecting executable or externally loaded content.
+ * Remove SVG and malformed values from a comma-separated upload extension list.
  */
-function is_safe_svg($svg)
+function sanitize_upload_extensions($extensions)
 {
-    if (!is_string($svg) || $svg === '' || strpos($svg, "\0") !== false || !preg_match('//u', $svg)) {
+    if (!is_string($extensions)) {
+        return '';
+    }
+
+    $allowed = array();
+    foreach (explode(',', $extensions) as $extension) {
+        $extension = strtolower(trim($extension));
+        if ($extension === '' || !preg_match('/\A[a-z0-9]+\z/', $extension)
+            || in_array($extension, array('svg', 'svgz'), true)
+            || in_array($extension, $allowed, true)) {
+            continue;
+        }
+        $allowed[] = $extension;
+    }
+
+    return implode(',', $allowed);
+}
+
+/**
+ * Reject SVG by extension, MIME type, or uploaded file content.
+ */
+function is_forbidden_svg_upload($filename, $mime = '', $pathname = '')
+{
+    $extension = is_string($filename) ? strtolower(pathinfo($filename, PATHINFO_EXTENSION)) : '';
+    if (in_array($extension, array('svg', 'svgz'), true)) {
+        return true;
+    }
+
+    if (is_string($mime)) {
+        $mime = strtolower(trim(strtok($mime, ';')));
+        if (in_array($mime, array('image/svg+xml', 'image/svg', 'application/svg+xml'), true)) {
+            return true;
+        }
+    }
+
+    if (!is_string($pathname) || $pathname === '' || !is_file($pathname) || !is_readable($pathname)) {
         return false;
     }
 
-    $svg = preg_replace('/^\xEF\xBB\xBF/', '', $svg);
-    if (!preg_match('/\A\s*(?:<\?xml\s[^?]*\?>\s*)?(?:<!--[\s\S]*?-->\s*)*<svg(?:\s|>)/i', $svg)
-        || !preg_match('/<\/svg\s*>\s*\z/i', $svg)) {
+    $handle = @fopen($pathname, 'rb');
+    if ($handle === false) {
         return false;
     }
 
-    $blockedElements = 'script|handler|listener|foreignObject|iframe|frame|frameset|object|embed|applet|audio|video|image|use|a|style|link|meta|base|form|input|button|textarea|select|option|animate|animateMotion|animateTransform|set';
-    if (preg_match('/<\s*\/?\s*(?:[a-z][a-z0-9_.-]*:)?(?:' . $blockedElements . ')\b/i', $svg)) {
-        return false;
+    $overlap = '';
+    while (!feof($handle)) {
+        $chunk = fread($handle, 8192);
+        if ($chunk === false) {
+            break;
+        }
+        $sample = $overlap . $chunk;
+        if (preg_match('/<\s*(?:[a-z][a-z0-9_.-]*:)?svg(?:\s|>)/i', $sample)) {
+            fclose($handle);
+            return true;
+        }
+        $overlap = substr($sample, -128);
     }
+    fclose($handle);
 
-    if (preg_match('/<\s*!\s*(?:DOCTYPE|ENTITY)\b/i', $svg)
-        || preg_match('/<\?(?!xml\s)/i', $svg)
-        || preg_match('/\s(?:on[a-z0-9_.:-]*|href|xlink:href|style|src|formaction|xml:base)\s*=/i', $svg)
-        || preg_match('/(?:javascript|vbscript|data)\s*:/i', $svg)
-        || preg_match('/url\s*\(\s*(?!["\']?#)/i', $svg)) {
-        return false;
-    }
-
-    return true;
+    return false;
 }
 
 /**
@@ -640,12 +676,7 @@ function static_cdn()
 function getExtensions()
 {
     global $config;
-    $arr = explode(',', $config['extensions']);
-    $mime = '';
-    for ($i = 0; $i < count($arr); $i++) {
-        $mime .= $arr . ',';
-    }
-    return rtrim($mime, ',');
+    return sanitize_upload_extensions(isset($config['extensions']) ? $config['extensions'] : '');
 }
 
 /**
