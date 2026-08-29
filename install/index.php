@@ -117,7 +117,6 @@ function checkPASS($name)
         <p class="text-primary">如果使用Liunx主机权限错误可以使用以下命令: </p>
         <h6 class="code">chmod 755 -R <?php echo APP_ROOT; ?></h6>
         <h6 class="code">chown -R www:www <?php echo APP_ROOT; ?></h6>
-        <a href="./README/chmod.png" data-toggle="lightbox" class="btn btn-mini btn-primary">宝塔面板赋予权限演示</a>
         <hr />
         <p class="text-danger">如果你不想安装上述PHP扩展或跳过安装过程请删除<code>install</code>目录 <a href="https://www.kancloud.cn/easyimage/easyimage/2635850" target="_blank" class="btn btn-mini btn-primary">跳过安装页面</a></p>
         <a href="./index.php"><button class="btn btn-danger" type="button">请满足上述要求后点击刷新</button></a>
