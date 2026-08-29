@@ -246,7 +246,7 @@ This overwrites the entire config file. Any missing keys from the form will be l
 | `chunks` | int | 0 | Chunk size for upload (0 = disabled) |
 | `storage_path` | string | `Y/m/d/` | Date-based folder structure |
 | `extensions` | string | `jpg,jpeg,png,gif,bmp,webp,ico,jfif,tif,tga` | Allowed extensions (SVG is always disabled) |
-| `trusted_proxies` | string | empty | Comma-separated trusted proxy IPs/CIDRs allowed to supply `X-Forwarded-For` |
+| `trusted_proxies` | string | empty | Trusted proxies allowed to supply client IP via `CF-Connecting-IP`, `X-Real-IP`, then `X-Forwarded-For` |
 | `maxSize` | int | 10485760 | Max file size (bytes) |
 | `timezone` | string | `Asia/Shanghai` | PHP timezone |
 

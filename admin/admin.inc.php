@@ -678,7 +678,7 @@ auto_delete(); //定时删除
                         </div>
                         <div class="col-md-4">
                             <div class="form-group">
-                                <label style="font-weight: bold" data-toggle="tooltip" title="仅这些直连代理可提供 X-Forwarded-For；支持 IPv4、IPv6 和 CIDR">可信反向代理</label>
+                                <label style="font-weight: bold" data-toggle="tooltip" title="仅这些直连代理可按 CF-Connecting-IP、X-Real-IP、X-Forwarded-For 的优先级提供客户端地址；支持 IPv4、IPv6 和 CIDR">可信反向代理</label>
                                 <textarea class="form-control" rows="4" name="trusted_proxies" placeholder="127.0.0.1,10.0.0.0/8,2001:db8::/32"><?php echo htmlspecialchars(isset($config['trusted_proxies']) ? $config['trusted_proxies'] : '', ENT_QUOTES, 'UTF-8'); ?></textarea>
                             </div>
                         </div>

@@ -20,9 +20,19 @@ function assert_same($expected, $actual, $message)
     }
 }
 
-function set_request_addresses($remote, $forwarded = null, $clientIp = null)
+function set_request_addresses($remote, $xRealIp = null, $cfConnectingIp = null, $forwarded = null, $clientIp = null)
 {
     $_SERVER['REMOTE_ADDR'] = $remote;
+    if ($xRealIp === null) {
+        unset($_SERVER['HTTP_X_REAL_IP']);
+    } else {
+        $_SERVER['HTTP_X_REAL_IP'] = $xRealIp;
+    }
+    if ($cfConnectingIp === null) {
+        unset($_SERVER['HTTP_CF_CONNECTING_IP']);
+    } else {
+        $_SERVER['HTTP_CF_CONNECTING_IP'] = $cfConnectingIp;
+    }
     if ($forwarded === null) {
         unset($_SERVER['HTTP_X_FORWARDED_FOR']);
     } else {
@@ -36,22 +46,37 @@ function set_request_addresses($remote, $forwarded = null, $clientIp = null)
 }
 
 $config['trusted_proxies'] = '';
-set_request_addresses('198.51.100.20', '192.0.2.10', '192.0.2.11');
+set_request_addresses('198.51.100.20', '192.0.2.10', '192.0.2.11', '192.0.2.12', '192.0.2.13');
 assert_same('198.51.100.20', real_ip(), 'Direct clients must not control forwarding headers');
 
 $config['trusted_proxies'] = '10.0.0.0/8';
-set_request_addresses('198.51.100.20', null, '192.0.2.11');
-assert_same('198.51.100.20', real_ip(), 'Client-IP must always be ignored');
+set_request_addresses('198.51.100.20', '192.0.2.10', '192.0.2.11');
+assert_same('198.51.100.20', real_ip(), 'Untrusted direct clients must not control single-value headers');
 
 set_request_addresses('10.2.3.4', '198.51.100.42');
-assert_same('198.51.100.42', real_ip(), 'Trusted proxy should supply one client address');
+assert_same('198.51.100.42', real_ip(), 'Trusted proxy should supply X-Real-IP');
+
+set_request_addresses('10.2.3.4', null, '203.0.113.42');
+assert_same('203.0.113.42', real_ip(), 'Trusted proxy should supply CF-Connecting-IP');
+
+set_request_addresses('10.2.3.4', '198.51.100.42', '203.0.113.42');
+assert_same('203.0.113.42', real_ip(), 'CF-Connecting-IP should take precedence when both headers exist');
+
+set_request_addresses('10.0.0.5', '198.51.100.99, 203.0.113.7');
+assert_same('10.0.0.5', real_ip(), 'Comma-separated X-Real-IP must be rejected');
+
+set_request_addresses('10.0.0.5', null, 'unknown');
+assert_same('10.0.0.5', real_ip(), 'Malformed CF-Connecting-IP must be rejected');
+
+set_request_addresses('10.0.0.5', null, null, '198.51.100.99', '203.0.113.42');
+assert_same('198.51.100.99', real_ip(), 'X-Forwarded-For should remain a trusted-proxy fallback');
 
 $config['trusted_proxies'] = '10.0.0.0/8,192.168.0.0/16';
-set_request_addresses('10.0.0.5', '198.51.100.99, 203.0.113.7, 192.168.1.2');
-assert_same('203.0.113.7', real_ip(), 'Forwarding chains must stop at the first untrusted hop');
+set_request_addresses('10.0.0.5', null, null, '198.51.100.99, 203.0.113.7, 192.168.1.2');
+assert_same('203.0.113.7', real_ip(), 'X-Forwarded-For chains must stop at the first untrusted hop');
 
-set_request_addresses('10.0.0.5', 'unknown, 192.168.1.2');
-assert_same('10.0.0.5', real_ip(), 'Malformed forwarding chains must be ignored');
+set_request_addresses('10.0.0.5', null, null, null, '203.0.113.42');
+assert_same('10.0.0.5', real_ip(), 'Client-IP must remain ignored');
 
 $config['trusted_proxies'] = '2001:db8:ffff::/48';
 set_request_addresses('2001:db8:ffff::1', '2001:db8:abcd::99');

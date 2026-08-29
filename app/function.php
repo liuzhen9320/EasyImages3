@@ -1796,7 +1796,7 @@ function is_trusted_proxy_address($ip, $trustedProxies = null)
 }
 
 /**
- * Return the client address, honoring X-Forwarded-For only from trusted proxies.
+ * Return the client address supplied by a configured trusted proxy.
  */
 function real_ip()
 {
@@ -1805,8 +1805,27 @@ function real_ip()
         $remote = '0.0.0.0';
     }
 
-    if (!is_trusted_proxy_address($remote) || !isset($_SERVER['HTTP_X_FORWARDED_FOR'])
-        || !is_string($_SERVER['HTTP_X_FORWARDED_FOR'])
+    if (!is_trusted_proxy_address($remote)) {
+        return $remote;
+    }
+
+    foreach (array('HTTP_CF_CONNECTING_IP', 'HTTP_X_REAL_IP') as $header) {
+        if (!isset($_SERVER[$header])) {
+            continue;
+        }
+        if (!is_string($_SERVER[$header]) || strlen($_SERVER[$header]) > 64
+            || strpos($_SERVER[$header], ',') !== false) {
+            return $remote;
+        }
+
+        $client = normalize_ip_address($_SERVER[$header]);
+        if ($client === '') {
+            return $remote;
+        }
+        return $client;
+    }
+
+    if (!isset($_SERVER['HTTP_X_FORWARDED_FOR']) || !is_string($_SERVER['HTTP_X_FORWARDED_FOR'])
         || strlen($_SERVER['HTTP_X_FORWARDED_FOR']) > 4096) {
         return $remote;
     }
