@@ -1520,6 +1520,77 @@ function privateToken($length = 32)
 }
 
 /**
+ * Consume one API request from the token and connection-IP rate-limit bucket.
+ */
+function api_rate_limit($token, $action = 'consume')
+{
+    global $config;
+
+    $minuteLimit = 60;
+    $hourLimit = 1000;
+    $hourWindow = 3600;
+    $ip = isset($_SERVER['REMOTE_ADDR']) && filter_var($_SERVER['REMOTE_ADDR'], FILTER_VALIDATE_IP)
+        ? $_SERVER['REMOTE_ADDR'] : '0.0.0.0';
+    $directory = APP_ROOT . '/admin/logs/security/api-rate/';
+    $bucket = hash_hmac('sha256', (string) $token . "\0" . $ip, $config['password']);
+    $file = $directory . $bucket . '.php';
+
+    if ($action === 'reset') {
+        if (is_file($file)) {
+            @unlink($file);
+        }
+        return 0;
+    }
+
+    if (!is_dir($directory) && !mkdir($directory, 0750, true) && !is_dir($directory)) {
+        return $hourWindow;
+    }
+
+    $handle = fopen($file, 'c+');
+    if ($handle === false || !flock($handle, LOCK_EX)) {
+        if ($handle !== false) {
+            fclose($handle);
+        }
+        return $hourWindow;
+    }
+
+    $contents = stream_get_contents($handle);
+    $json = strpos($contents, "\n") === false ? '' : substr($contents, strpos($contents, "\n") + 1);
+    $attempts = json_decode($json, true);
+    if (!is_array($attempts)) {
+        $attempts = array();
+    }
+
+    $now = time();
+    $attempts = array_values(array_filter($attempts, function ($timestamp) use ($now, $hourWindow) {
+        return is_int($timestamp) && $timestamp > $now - $hourWindow;
+    }));
+    $minuteAttempts = array_values(array_filter($attempts, function ($timestamp) use ($now) {
+        return $timestamp > $now - 60;
+    }));
+
+    $retryAfter = 0;
+    if (count($minuteAttempts) >= $minuteLimit) {
+        $retryAfter = max($retryAfter, 60 - ($now - $minuteAttempts[0]));
+    }
+    if (count($attempts) >= $hourLimit) {
+        $retryAfter = max($retryAfter, $hourWindow - ($now - $attempts[0]));
+    }
+    if ($retryAfter === 0) {
+        $attempts[] = $now;
+    }
+
+    rewind($handle);
+    ftruncate($handle, 0);
+    fwrite($handle, '<?php exit; ?>' . PHP_EOL . json_encode($attempts));
+    fflush($handle);
+    flock($handle, LOCK_UN);
+    fclose($handle);
+
+    return max(0, (int) $retryAfter);
+}
+
+/**
  * 检查Token
  * @param $token 要检查的Token
  * @return string 201 访问成功但是服务端关闭API上传

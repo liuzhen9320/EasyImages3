@@ -45,6 +45,16 @@ $token = preg_replace('/[\W]/', '', $submittedToken);
 
 // 检查api合法性
 check_api($token);
+$retryAfter = api_rate_limit($token);
+if ($retryAfter > 0) {
+    http_response_code(429);
+    header('Retry-After: ' . $retryAfter);
+    exit(json_encode(array(
+        "result" => "failed",
+        "code" => 429,
+        "message" => "Too Many Requests",
+    ), JSON_UNESCAPED_UNICODE));
+}
 $tokenID = $tokenList[$token]['id'];
 
 // 分片上传
