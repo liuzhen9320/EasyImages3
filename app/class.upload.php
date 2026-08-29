@@ -4546,7 +4546,7 @@ class Upload {
                                   date('H:i:s'),
                                   (isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : 'n/a'),
                                   (isset($_SERVER['SERVER_NAME']) ? $_SERVER['SERVER_NAME'] : 'n/a'),
-                                  (isset($_SERVER['REMOTE_ADDR']) ? $_SERVER['REMOTE_ADDR'] : 'n/a'),
+                                  (function_exists('real_ip') ? real_ip() : 'n/a'),
                                   $this->gdversion(true)),
                             $this->image_text);
 

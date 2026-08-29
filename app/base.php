@@ -31,6 +31,9 @@ header("Content-Security-Policy: default-src 'self'; base-uri 'self'; form-actio
 define('APP_ROOT', str_replace(DIRECTORY_SEPARATOR, '/', realpath(dirname(__FILE__) . '/../')));
 // 时区设置 https://www.php.net/manual/zh/timezones.php
 require_once APP_ROOT . '/config/config.php';
+if (!isset($config['trusted_proxies']) || !is_string($config['trusted_proxies'])) {
+    $config['trusted_proxies'] = '';
+}
 empty($config['timezone']) ? date_default_timezone_set('Asia/Shanghai') : date_default_timezone_set($config['timezone']);
 // 修改内存限制 根据服务器配置选择，低于128M容易出现上传失败，你懂得图片挺占用内存的
 ini_set('memory_limit', '512M');

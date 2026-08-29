@@ -1244,29 +1244,7 @@ class timthumb
 
     protected function getIP()
     {
-        $rem = @$_SERVER["REMOTE_ADDR"];
-        $ff = @$_SERVER["HTTP_X_FORWARDED_FOR"];
-        $ci = @$_SERVER["HTTP_CLIENT_IP"];
-        if (preg_match('/^(?:192\.168|172\.16|10\.|127\.)/', $rem)) {
-            if ($ff) {
-                return $ff;
-            }
-            if ($ci) {
-                return $ci;
-            }
-            return $rem;
-        } else {
-            if ($rem) {
-                return $rem;
-            }
-            if ($ff) {
-                return $ff;
-            }
-            if ($ci) {
-                return $ci;
-            }
-            return "UNKNOWN";
-        }
+        return function_exists('real_ip') ? real_ip() : '0.0.0.0';
     }
 
     protected function debug($level, $msg)

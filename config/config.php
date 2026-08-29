@@ -86,6 +86,7 @@ $config=Array
 	'check_ip'=>0,
 	'check_ip_model'=>0,
 	'check_ip_list'=>'',
+	'trusted_proxies'=>'',
 	'md5_black'=>0,
 	'md5_blacklist'=>'',
 	'auto_delete'=>0,

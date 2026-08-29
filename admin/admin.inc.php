@@ -60,11 +60,14 @@ if (isset($_POST['update'])) {
         'storage_path', 'terms', 'textColor', 'textFont', 'textSize', 'theme',
         'thumbnail', 'thumbnail_h', 'thumbnail_w', 'timezone', 'tips', 'title',
         'token_path_status', 'token_suffix_ID', 'upload_first_show',
-        'upload_logs', 'waterImg', 'waterPosition', 'waterText', 'watermark'
+        'trusted_proxies', 'upload_logs', 'waterImg', 'waterPosition', 'waterText', 'watermark'
     );
     $postArr = filter_config_update($_POST, $config, $allowed_config_keys);
     if (isset($postArr['extensions'])) {
         $postArr['extensions'] = sanitize_upload_extensions($postArr['extensions']);
+    }
+    if (isset($postArr['trusted_proxies'])) {
+        $postArr['trusted_proxies'] = sanitize_trusted_proxies($postArr['trusted_proxies']);
     }
 
     $new_config = array_replace($config, $postArr);
@@ -662,7 +665,7 @@ auto_delete(); //定时删除
                         </div>
                     </div>
                     <div class="col-md-12">
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                             <div class="form-group">
                                 <div class="switch switch-inline">
                                     <input type="hidden" name="check_ip" value="0">
@@ -674,7 +677,13 @@ auto_delete(); //定时删除
                                 <label class="radio-inline"><input type="radio" name="check_ip_model" value="1" <?php if ($config['check_ip_model'] == 1) echo 'checked'; ?>> 白名单模式</label>
                             </div>
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label style="font-weight: bold" data-toggle="tooltip" title="仅这些直连代理可提供 X-Forwarded-For；支持 IPv4、IPv6 和 CIDR">可信反向代理</label>
+                                <textarea class="form-control" rows="4" name="trusted_proxies" placeholder="127.0.0.1,10.0.0.0/8,2001:db8::/32"><?php echo htmlspecialchars(isset($config['trusted_proxies']) ? $config['trusted_proxies'] : '', ENT_QUOTES, 'UTF-8'); ?></textarea>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
                             <div class="form-group">
                                 <div class="switch switch-inline">
                                     <input type="hidden" name="md5_black" value="0">

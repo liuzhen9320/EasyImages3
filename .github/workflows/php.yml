@@ -47,3 +47,6 @@ jobs:
 
       - name: Test SVG upload rejection
         run: bash tests/svg_upload_rejection.sh
+
+      - name: Test trusted proxy IP handling
+        run: bash tests/trusted_proxy_ip.sh

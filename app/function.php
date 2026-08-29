@@ -1605,84 +1605,215 @@ function writefile($filename, $writetext, $openmod = 'w')
 }
 
 /**
- * 获得用户的真实IP地址
- * 来源：ecshop
- * @return mixed|string string
+ * Return a canonical IPv4 or IPv6 address, or an empty string when invalid.
+ */
+function normalize_ip_address($ip)
+{
+    if (!is_string($ip)) {
+        return '';
+    }
+
+    $ip = trim($ip);
+    if ($ip === '' || filter_var($ip, FILTER_VALIDATE_IP) === false) {
+        return '';
+    }
+
+    $packed = @inet_pton($ip);
+    $normalized = $packed === false ? false : @inet_ntop($packed);
+    return is_string($normalized) ? $normalized : '';
+}
+
+/**
+ * Test an IPv4 or IPv6 address against an exact address or CIDR network.
+ */
+function ip_in_network($ip, $network)
+{
+    $ip = normalize_ip_address($ip);
+    if ($ip === '' || !is_string($network)) {
+        return false;
+    }
+
+    $parts = explode('/', trim($network), 2);
+    $networkIp = normalize_ip_address($parts[0]);
+    if ($networkIp === '') {
+        return false;
+    }
+
+    $ipPacked = @inet_pton($ip);
+    $networkPacked = @inet_pton($networkIp);
+    if ($ipPacked === false || $networkPacked === false || strlen($ipPacked) !== strlen($networkPacked)) {
+        return false;
+    }
+
+    $bits = strlen($ipPacked) * 8;
+    if (!isset($parts[1])) {
+        $prefix = $bits;
+    } elseif ($parts[1] === '' || !ctype_digit($parts[1]) || (int) $parts[1] > $bits) {
+        return false;
+    } else {
+        $prefix = (int) $parts[1];
+    }
+
+    $bytes = (int) floor($prefix / 8);
+    if ($bytes > 0 && substr($ipPacked, 0, $bytes) !== substr($networkPacked, 0, $bytes)) {
+        return false;
+    }
+
+    $remaining = $prefix % 8;
+    if ($remaining === 0) {
+        return true;
+    }
+
+    $mask = (0xff << (8 - $remaining)) & 0xff;
+    return (ord($ipPacked[$bytes]) & $mask) === (ord($networkPacked[$bytes]) & $mask);
+}
+
+/**
+ * Normalize a comma or whitespace separated trusted-proxy network list.
+ */
+function sanitize_trusted_proxies($trustedProxies)
+{
+    if (!is_string($trustedProxies)) {
+        return '';
+    }
+
+    $result = array();
+    foreach (preg_split('/[\s,]+/', trim($trustedProxies)) as $network) {
+        if ($network === '') {
+            continue;
+        }
+
+        $parts = explode('/', $network, 2);
+        $ip = normalize_ip_address($parts[0]);
+        if ($ip === '') {
+            continue;
+        }
+
+        $normalized = $ip;
+        if (isset($parts[1])) {
+            $bits = strpos($ip, ':') === false ? 32 : 128;
+            if ($parts[1] === '' || !ctype_digit($parts[1]) || (int) $parts[1] > $bits) {
+                continue;
+            }
+            $normalized .= '/' . (int) $parts[1];
+        }
+
+        if (!in_array($normalized, $result, true)) {
+            $result[] = $normalized;
+        }
+    }
+
+    return implode(',', $result);
+}
+
+/**
+ * Return whether an address belongs to a configured trusted proxy network.
+ */
+function is_trusted_proxy_address($ip, $trustedProxies = null)
+{
+    global $config;
+
+    if ($trustedProxies === null) {
+        $trustedProxies = isset($config['trusted_proxies']) ? $config['trusted_proxies'] : '';
+    }
+
+    $trustedProxies = sanitize_trusted_proxies($trustedProxies);
+    if ($trustedProxies === '') {
+        return false;
+    }
+
+    foreach (explode(',', $trustedProxies) as $network) {
+        if (ip_in_network($ip, $network)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * Return the client address, honoring X-Forwarded-For only from trusted proxies.
  */
 function real_ip()
 {
-    static $realip = NULL;
-    if ($realip !== NULL) {
-        return $realip;
+    $remote = normalize_ip_address(isset($_SERVER['REMOTE_ADDR']) ? $_SERVER['REMOTE_ADDR'] : '');
+    if ($remote === '') {
+        $remote = '0.0.0.0';
     }
-    if (isset($_SERVER)) {
-        if (isset($_SERVER['HTTP_X_FORWARDED_FOR'])) {
-            $arr = explode(',', $_SERVER['HTTP_X_FORWARDED_FOR']);
-            /* 取X-Forwarded-For中第一个非unknown的有效IP字符串 */
-            foreach ($arr as $ip) {
-                $ip = trim($ip);
 
-                if ($ip != 'unknown') {
-                    $realip = $ip;
-
-                    break;
-                }
-            }
-        } elseif (isset($_SERVER['HTTP_CLIENT_IP'])) {
-            $realip = $_SERVER['HTTP_CLIENT_IP'];
-        } else {
-            if (isset($_SERVER['REMOTE_ADDR'])) {
-                $realip = $_SERVER['REMOTE_ADDR'];
-            } else {
-                $realip = '0.0.0.0';
-            }
-        }
-    } else {
-        if (getenv('HTTP_X_FORWARDED_FOR')) {
-            $realip = getenv('HTTP_X_FORWARDED_FOR');
-        } elseif (getenv('HTTP_CLIENT_IP')) {
-            $realip = getenv('HTTP_CLIENT_IP');
-        } else {
-            $realip = getenv('REMOTE_ADDR');
-        }
+    if (!is_trusted_proxy_address($remote) || !isset($_SERVER['HTTP_X_FORWARDED_FOR'])
+        || !is_string($_SERVER['HTTP_X_FORWARDED_FOR'])
+        || strlen($_SERVER['HTTP_X_FORWARDED_FOR']) > 4096) {
+        return $remote;
     }
-    // 使用正则验证IP地址的有效性，防止伪造IP地址进行SQL注入攻击
-    preg_match("/[\d\.]{7,15}/", $realip, $onlineip);
-    $realip = !empty($onlineip[0]) ? $onlineip[0] : '0.0.0.0';
-    return $realip;
+
+    $forwarded = explode(',', $_SERVER['HTTP_X_FORWARDED_FOR']);
+    if (count($forwarded) > 32) {
+        return $remote;
+    }
+
+    $addresses = array();
+    foreach ($forwarded as $address) {
+        $address = normalize_ip_address($address);
+        if ($address === '') {
+            return $remote;
+        }
+        $addresses[] = $address;
+    }
+
+    $client = $remote;
+    for ($index = count($addresses) - 1; $index >= 0; $index--) {
+        if (!is_trusted_proxy_address($client)) {
+            break;
+        }
+        $client = $addresses[$index];
+    }
+
+    return $client;
 }
 
 /**
  * IP黑白名单检测，支持IP段检测
  * @param string $ipNow 要检测的IP
  * @param string|array $ipList 白名单IP或者黑名单IP
- * @return boolean false|true true:白名单模式，false:黑名单模式
- * @return bool
+ * @return bool true when the request should be blocked
  */
 function checkIP($ipNow = null, $ipList = null, $model = false)
 {
-    $ipNow = isset($ipNow) ?: real_ip();
+    $ipNow = $ipNow === null ? real_ip() : normalize_ip_address($ipNow);
+    $matched = false;
 
-    // 将IP文本转换为数组
     if (is_string($ipList)) {
-        $ipList = explode(",", $ipList);
+        $entries = preg_split('/[\s,]+/', trim($ipList));
+    } elseif (is_array($ipList)) {
+        $entries = $ipList;
     } else {
-        echo 'IP名单错误';
+        $entries = array();
     }
 
-    $ipregexp = implode('|', str_replace(array('*', '.'), array('\d+', '\.'), $ipList));
-    $result = preg_match("/^(" . $ipregexp . ")$/", $ipNow);
-
-    // 白名单模式
-    if ($model) {
-        if (in_array($ipNow, $ipList)) {
-            return false;
+    if ($ipNow !== '') {
+        foreach ($entries as $entry) {
+            if (!is_string($entry)) {
+                continue;
+            }
+            $entry = trim($entry);
+            if ($entry === '') {
+                continue;
+            }
+            if (strpos($entry, '*') !== false) {
+                $pattern = '/\A' . str_replace('\\*', '[0-9]{1,3}', preg_quote($entry, '/')) . '\z/';
+                if (strpos($ipNow, ':') === false && preg_match($pattern, $ipNow)) {
+                    $matched = true;
+                    break;
+                }
+            } elseif (ip_in_network($ipNow, $entry)) {
+                $matched = true;
+                break;
+            }
         }
     }
-    // 黑名单模式
-    if ($result) {
-        return true;
-    }
+
+    return $model ? !$matched : $matched;
 }
 
 /**
@@ -1727,8 +1858,7 @@ function api_rate_limit($token, $action = 'consume')
     $minuteLimit = 60;
     $hourLimit = 1000;
     $hourWindow = 3600;
-    $ip = isset($_SERVER['REMOTE_ADDR']) && filter_var($_SERVER['REMOTE_ADDR'], FILTER_VALIDATE_IP)
-        ? $_SERVER['REMOTE_ADDR'] : '0.0.0.0';
+    $ip = real_ip();
     $directory = APP_ROOT . '/admin/logs/security/api-rate/';
     $bucket = hash_hmac('sha256', (string) $token . "\0" . $ip, $config['password']);
     $file = $directory . $bucket . '.php';
@@ -2248,8 +2378,7 @@ function login_rate_limit($username, $action = 'check')
     global $config;
     global $guestConfig;
 
-    $ip = isset($_SERVER['REMOTE_ADDR']) && filter_var($_SERVER['REMOTE_ADDR'], FILTER_VALIDATE_IP)
-        ? $_SERVER['REMOTE_ADDR'] : '0.0.0.0';
+    $ip = real_ip();
     $username = is_string($username) ? trim($username) : '';
     $account = ($username === $config['user'] || array_key_exists($username, $guestConfig))
         ? strtolower($username) : 'unknown';
@@ -2416,8 +2545,7 @@ function chunk($target_name, $file_field = 'file', $upload_identity = '')
         return false;
     }
 
-    $remote_ip = isset($_SERVER['REMOTE_ADDR']) && filter_var($_SERVER['REMOTE_ADDR'], FILTER_VALIDATE_IP)
-        ? $_SERVER['REMOTE_ADDR'] : '0.0.0.0';
+    $remote_ip = real_ip();
     $temp_root = rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'easyimage-chunks';
     if (!is_dir($temp_root) && !mkdir($temp_root, 0700, true) && !is_dir($temp_root)) {
         return false;
