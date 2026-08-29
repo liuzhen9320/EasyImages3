@@ -3,6 +3,32 @@
 > 审计日期: 2026-07-09
 > 代码版本: 2.8.7 (master `42b4711`)
 
+## 第二轮复审（2026-08-29，基于 `04025cc`）
+
+> 状态说明：以下为第一轮 19 项修复完成后新确认的问题，均待修复。按“确认一项、立即记录一项”的方式持续补充。
+
+### 20. 严重 — `admin/filer.php` 可越出站点根目录且写操作无 CSRF
+
+**文件**: `admin/filer.php:22`, `admin/filer.php:83-90`, `admin/filer.php:627-634`, `admin/filer.php:678-884`, `admin/filer.php:955-958`
+
+旧版 web-indexr 文件管理器把根目录设为 `$_SERVER['DOCUMENT_ROOT']`，但相对路径转换仅做字符串拼接：
+
+```php
+RexHelper::$root = $_SERVER['DOCUMENT_ROOT'];
+
+static function path_rtoa($path)
+{
+    $path = self::$root . DIRECTORY_SEPARATOR . trim($path, '/\\');
+    return $path;
+}
+```
+
+`path` 来自 `$_REQUEST`，没有 `realpath()`、`..` 拒绝或根目录前缀校验。登录文件管理器后，攻击者可提交 `path=/../../tmp`，通过 `newfile`、`edit`、`upload`、`rename`、`chmod`、`zip`、`unzip`、`delete` 等操作读写或删除站点根目录外、PHP 进程权限可及的文件。
+
+同时，所有动作仅检查文件管理器 Session，不校验 CSRF Token；删除、注销和清空 OPcache 等动作可由 GET 触发。实测使用 `POST ?action=newfile&path=/../../tmp` 成功创建 `/tmp/easyimages-filer-audit-20260829.txt`，再用不含 Token 的 `GET ?action=delete&path=/../../tmp/easyimages-filer-audit-20260829.txt` 成功删除。
+
+**修复要求**：将文件管理根目录固定到配置的图片存储根；对每个源/目标路径做规范化和目录边界校验，拒绝 `..`、NUL 与符号链接逃逸；所有状态变更仅接受 POST 并统一校验 CSRF Token；移除 GET 写操作。考虑该文件管理器长期无人维护，优先评估删除 `admin/filer.php`，只保留已受限的 `admin/manager.php`。
+
 ---
 
 ## 🔴 严重 (3)
