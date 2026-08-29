@@ -40,7 +40,8 @@ if ($config['check_ip']) {
 }
 
 // 获取Token并过滤非字母数字, 删除空格
-$token = preg_replace('/[\W]/', '', $_POST['token']);
+$submittedToken = isset($_POST['token']) && is_string($_POST['token']) ? $_POST['token'] : '';
+$token = preg_replace('/[\W]/', '', $submittedToken);
 
 // 检查api合法性
 check_api($token);
