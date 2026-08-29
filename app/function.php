@@ -2175,33 +2175,158 @@ function any_upload($remoteFile = null, $localFile = null, $way = 'upload')
 
 /**
  * 分片上传
- * @param $target_name 名称
- * @return Sting $target_name
+ * @param string $target_name 原始文件名
+ * @param string $file_field 上传字段名
+ * @param string $upload_identity 分片上传身份标识
+ * @return string|null|false 完整文件路径、等待其他分片或失败
  */
-function chunk($target_name)
+function chunk($target_name, $file_field = 'file', $upload_identity = '')
 {
     global $config;
-    // 分片缓存目录
-    $temp_dir = APP_ROOT . $config['path'] . 'cache/' . $target_name . '/';
-    // 分片合并后的文件
-    $target_file = APP_ROOT . $config['path'] . 'cache/' . $target_name;
-    // 储存分片
-    if (!is_dir($temp_dir)) mkdir($temp_dir, 0755, true);
-    // 检查分片参数
-    if (!is_numeric($_REQUEST['chunk']) || !is_numeric($_REQUEST['chunks'])) {
-        die('Invalid input'); // or die('Invalid input');
+
+    if (!is_string($target_name) || $target_name === '' || $target_name === '.' || $target_name === '..' || strlen($target_name) > 255
+        || strpos($target_name, "\0") !== false || basename(str_replace('\\', '/', $target_name)) !== $target_name
+        || !in_array($file_field, array('file', 'image'), true) || !is_string($upload_identity)
+        || $upload_identity === '' || strlen($upload_identity) > 256) {
+        return false;
     }
-    // 移动缓存分片
-    move_uploaded_file($_FILES['file']['tmp_name'], $temp_dir . $_REQUEST['chunk']);
-    // 合并分片
-    if ($_REQUEST['chunk'] == $_REQUEST['chunks'] - 1) { // 最后一个分片
-        if (!is_dir($target_file)) mkdir($target_file, 0755, true);
-        $handle = fopen($target_name, 'x+');
-        for ($i = 0; $i < $_REQUEST['chunks']; $i++) {
-            fwrite($handle, file_get_contents($temp_dir . $i));
+
+    $chunk_value = isset($_REQUEST['chunk']) ? $_REQUEST['chunk'] : null;
+    $chunks_value = isset($_REQUEST['chunks']) ? $_REQUEST['chunks'] : null;
+    if ((!is_int($chunk_value) && !(is_string($chunk_value) && ctype_digit($chunk_value)))
+        || (!is_int($chunks_value) && !(is_string($chunks_value) && ctype_digit($chunks_value)))) {
+        return false;
+    }
+
+    $chunk_index = (int) $chunk_value;
+    $chunk_count = (int) $chunks_value;
+    $chunk_size = (int) $config['chunks'];
+    $max_size = (int) $config['maxSize'];
+    $max_chunks = $chunk_size > 0 ? min(1000, max(1, (int) ceil($max_size / $chunk_size))) : 0;
+    if ($chunk_index < 0 || $chunk_count < 1 || $chunk_index >= $chunk_count
+        || $chunk_count > $max_chunks || !isset($_FILES[$file_field]) || !is_array($_FILES[$file_field])) {
+        return false;
+    }
+
+    $upload = $_FILES[$file_field];
+    if (!isset($upload['tmp_name'], $upload['error']) || $upload['error'] !== UPLOAD_ERR_OK
+        || !is_string($upload['tmp_name']) || !is_uploaded_file($upload['tmp_name'])) {
+        return false;
+    }
+    $uploaded_size = filesize($upload['tmp_name']);
+    if ($uploaded_size === false || $uploaded_size < 1 || $uploaded_size > $chunk_size) {
+        return false;
+    }
+
+    $remote_ip = isset($_SERVER['REMOTE_ADDR']) && filter_var($_SERVER['REMOTE_ADDR'], FILTER_VALIDATE_IP)
+        ? $_SERVER['REMOTE_ADDR'] : '0.0.0.0';
+    $temp_root = rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'easyimage-chunks';
+    if (!is_dir($temp_root) && !mkdir($temp_root, 0700, true) && !is_dir($temp_root)) {
+        return false;
+    }
+
+    foreach ((array) glob($temp_root . DIRECTORY_SEPARATOR . '*', GLOB_ONLYDIR) as $stale_dir) {
+        $stale_time = @filemtime($stale_dir);
+        if (preg_match('/^[a-f0-9]{64}$/', basename($stale_dir)) && $stale_time !== false && $stale_time < time() - 86400) {
+            deldir($stale_dir);
         }
-        fclose($handle);
-        deldir($temp_dir); // 删除临时目录
     }
-    return $target_name;
+
+    $bucket = hash_hmac('sha256', $target_name . "\0" . $chunk_count . "\0" . $remote_ip . "\0" . $upload_identity, $config['password']);
+    $temp_dir = $temp_root . DIRECTORY_SEPARATOR . $bucket;
+    $parts_dir = $temp_dir . DIRECTORY_SEPARATOR . 'parts';
+    if (!is_dir($parts_dir) && !mkdir($parts_dir, 0700, true) && !is_dir($parts_dir)) {
+        return false;
+    }
+    touch($temp_dir);
+
+    $lock = fopen($temp_dir . DIRECTORY_SEPARATOR . 'upload.lock', 'c');
+    if ($lock === false || !flock($lock, LOCK_EX)) {
+        if ($lock !== false) {
+            fclose($lock);
+        }
+        return false;
+    }
+
+    $part_file = $parts_dir . DIRECTORY_SEPARATOR . $chunk_index . '.part';
+    if (!move_uploaded_file($upload['tmp_name'], $part_file)) {
+        flock($lock, LOCK_UN);
+        fclose($lock);
+        return false;
+    }
+
+    $complete = true;
+    $total_size = 0;
+    for ($i = 0; $i < $chunk_count; $i++) {
+        $candidate = $parts_dir . DIRECTORY_SEPARATOR . $i . '.part';
+        if (!is_file($candidate)) {
+            $complete = false;
+            break;
+        }
+        $part_size = filesize($candidate);
+        if ($part_size === false || $part_size < 1 || $part_size > $chunk_size) {
+            $complete = false;
+            break;
+        }
+        $total_size += $part_size;
+    }
+
+    if (!$complete) {
+        flock($lock, LOCK_UN);
+        fclose($lock);
+        return null;
+    }
+    if ($total_size > $max_size) {
+        flock($lock, LOCK_UN);
+        fclose($lock);
+        deldir($temp_dir);
+        return false;
+    }
+
+    $target_file = $temp_dir . DIRECTORY_SEPARATOR . $target_name;
+    $target_handle = fopen($target_file, 'x+b');
+    if ($target_handle === false) {
+        flock($lock, LOCK_UN);
+        fclose($lock);
+        return false;
+    }
+    $merged = true;
+    for ($i = 0; $i < $chunk_count; $i++) {
+        $part_handle = fopen($parts_dir . DIRECTORY_SEPARATOR . $i . '.part', 'rb');
+        if ($part_handle === false || stream_copy_to_stream($part_handle, $target_handle) === false) {
+            $merged = false;
+        }
+        if ($part_handle !== false) {
+            fclose($part_handle);
+        }
+        if (!$merged) {
+            break;
+        }
+    }
+    fclose($target_handle);
+    if (!$merged || filesize($target_file) !== $total_size) {
+        @unlink($target_file);
+        flock($lock, LOCK_UN);
+        fclose($lock);
+        return false;
+    }
+
+    foreach ((array) glob($parts_dir . DIRECTORY_SEPARATOR . '*.part') as $part_file) {
+        @unlink($part_file);
+    }
+    @rmdir($parts_dir);
+    flock($lock, LOCK_UN);
+    fclose($lock);
+    @unlink($temp_dir . DIRECTORY_SEPARATOR . 'upload.lock');
+
+    register_shutdown_function(function () use ($target_file, $temp_dir) {
+        if (is_file($target_file)) {
+            @unlink($target_file);
+        }
+        if (is_dir($temp_dir)) {
+            @rmdir($temp_dir);
+        }
+    });
+
+    return $target_file;
 }

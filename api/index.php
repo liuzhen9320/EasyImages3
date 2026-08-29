@@ -61,7 +61,14 @@ $tokenID = $tokenList[$token]['id'];
 if (!$config['chunks']) {
     $handle = new Upload($_FILES['image'], 'zh_CN');
 } else {
-    $chunk = chunk($_POST['name']);
+    $targetName = isset($_POST['name']) && is_string($_POST['name']) ? $_POST['name'] : '';
+    $chunk = chunk($targetName, 'image', $token);
+    if ($chunk === false) {
+        exit(json_encode(array("result" => "failed", "code" => 400, "message" => "Invalid chunk"), JSON_UNESCAPED_UNICODE));
+    }
+    if ($chunk === null) {
+        exit(json_encode(array("result" => "success", "code" => 202, "message" => "Chunk accepted"), JSON_UNESCAPED_UNICODE));
+    }
     $handle = new Upload($chunk, 'zh_CN');
 }
 

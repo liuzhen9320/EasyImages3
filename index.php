@@ -1,4 +1,6 @@
 <?php
+require_once __DIR__ . '/app/function.php';
+$uploadIdentity = csrf_token();
 require_once __DIR__ . '/app/header.php';
 /** 顶部广告 */
 if ($config['ad_top']) echo $config['ad_top_info'];
@@ -131,6 +133,7 @@ mustLogin();
     // sign
     multipart_params: {
       'sign': new Date().getTime() / 1000 | 0,
+      '_upload_id': <?php echo json_encode($uploadIdentity); ?>,
     },
     // 预览图尺寸
     previewImageSize: {

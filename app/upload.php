@@ -77,8 +77,15 @@ if ($config['ip_upload_counts'] > 0 && !is_who_login('status')) {
 
 // 分片上传
 if ($config['chunks']) {
-    $chunk = chunk($_POST['name']);
-    // exit($chunk);
+    $targetName = isset($_POST['name']) && is_string($_POST['name']) ? $_POST['name'] : '';
+    $uploadIdentity = isset($_POST['_upload_id']) && is_string($_POST['_upload_id']) ? $_POST['_upload_id'] : '';
+    $chunk = csrf_validate($uploadIdentity) ? chunk($targetName, 'file', $uploadIdentity) : false;
+    if ($chunk === false) {
+        exit(json_encode(array("result" => "failed", "code" => 400, "message" => "Invalid chunk"), JSON_UNESCAPED_UNICODE));
+    }
+    if ($chunk === null) {
+        exit(json_encode(array("result" => "success", "code" => 202, "message" => "Chunk accepted"), JSON_UNESCAPED_UNICODE));
+    }
     $handle = new Upload($chunk, 'zh_CN');
 } else {
     $handle = new Upload($_FILES['file'], 'zh_CN');
