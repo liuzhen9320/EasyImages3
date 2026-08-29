@@ -1,14 +1,24 @@
 <?php
 require_once __DIR__ . '/../app/function.php';
+require_once __DIR__ . '/functions.php';
 // 存在程序锁则跳转主页
 if (file_exists(APP_ROOT . '/config/install.lock')) {
     exit(header("Location:/../index.php"));
 }
 
 // 验证上一步环境检测
-$state = isset($_POST['check']) ? $_POST['check'] : exit(header("Location:index.php"));
-if ($state !== 'checked') {
-    exit(header("Location:index.php"));
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    header('Allow: POST');
+    install_error('安装配置页只接受 POST 请求。', 405);
+}
+$state = isset($_POST['check']) ? $_POST['check'] : null;
+$environmentToken = isset($_POST['install_token']) ? $_POST['install_token'] : null;
+if ($state !== 'checked' || !install_consume_token('environment', $environmentToken)) {
+    install_error('安装步骤已失效，请重新执行环境检查。', 403);
+}
+$installToken = install_issue_token('configuration');
+if ($installToken === false) {
+    install_error('无法创建安全安装会话。', 500);
 }
 
 ?>
@@ -51,35 +61,36 @@ if ($state !== 'checked') {
     <h1 class="header-dividing" style="text-align:center">EasyIamge 2.0 网站基础配置</h1>
     <div class="col-md-10 col-md-offset-2" style="text-align: center;">
         <form class="form-horizontal" action="./contorl.php" method="post">
+            <input type="hidden" name="install_token" value="<?php echo htmlspecialchars($installToken, ENT_QUOTES, 'UTF-8'); ?>">
             <div class="form-group">
                 <label class="col-sm-2">网站域名,末尾不加"/"</label>
                 <div class="col-md-6 col-sm-10">
-                    <input type="url" class="form-control" name="domain" value="<?php echo get_whole_url('/install/install.php'); ?>" required="required" onkeyup="this.value=this.value.replace(/\s/g,'')" placeholder="网站域名与图片链接域名可以不同，比如A域名上传，可以返回B域名图片链接，如果不变的话，下边2个填写成一样的!" title="网站域名与图片链接域名可以不同，比如A域名上传，可以返回B域名图片链接，如果不变的话，下边2个填写成一样的!">
+                    <input type="url" class="form-control" name="domain" value="<?php echo htmlspecialchars(get_whole_url('/install/install.php'), ENT_QUOTES, 'UTF-8'); ?>" required="required" onkeyup="this.value=this.value.replace(/\s/g,'')" placeholder="网站域名与图片链接域名可以不同，比如A域名上传，可以返回B域名图片链接，如果不变的话，下边2个填写成一样的!" title="网站域名与图片链接域名可以不同，比如A域名上传，可以返回B域名图片链接，如果不变的话，下边2个填写成一样的!">
                 </div>
             </div>
             <div class="form-group">
                 <label class="col-sm-2">图片链接域名,末尾不加"/"</label>
                 <div class="col-md-6 col-sm-10">
-                    <input type="text" class="form-control" name="imgurl" value="<?php echo get_whole_url('/install/install.php'); ?>" required="required" placeholder="给图片的域名，末尾不加/，如果没有请填写和上边的一样即可" onkeyup="this.value=this.value.replace(/\s/g,'')" placeholder="图片域名">
+                    <input type="url" class="form-control" name="imgurl" value="<?php echo htmlspecialchars(get_whole_url('/install/install.php'), ENT_QUOTES, 'UTF-8'); ?>" required="required" placeholder="给图片的域名，末尾不加/，如果没有请填写和上边的一样即可" onkeyup="this.value=this.value.replace(/\s/g,'')">
                 </div>
             </div>
             <div class="form-group">
                 <label class="col-sm-2 ">管理账号</label>
                 <div class="col-md-6 col-sm-10">
-                    <input type="text" class="form-control" name="user" value="admin" placeholder="请以大小写英文或数字输入管理员账号" onkeyup="this.value=this.value.replace(/[^\w\.\/]/ig,'')">
+                    <input type="text" class="form-control" name="user" value="admin" required="required" maxlength="64" pattern="[A-Za-z0-9_.-]+" placeholder="请以大小写英文或数字输入管理员账号" onkeyup="this.value=this.value.replace(/[^A-Za-z0-9_.-]/g,'')">
                 </div>
             </div>
             <div class="form-group">
                 <label class="col-sm-2 ">管理密码</label>
-                <span class="message">请输入8~18位密码</span>
+                <span class="message">请输入8~128位密码</span>
                 <div class="col-md-6 col-sm-10 register">
-                    <input type="text" class="form-control inp" name="password" value="admin@123" required="required" placeholder="请使用英文输入法输入密码并不小于8位数" onkeyup="this.value=this.value.replace(/\s/g,'')">
+                    <input type="password" class="form-control inp" name="password" required="required" minlength="8" maxlength="128" autocomplete="new-password" placeholder="请使用英文输入法输入密码并不小于8位数">
                 </div>
             </div>
             <div class="form-group">
                 <label class="col-sm-2 ">确认密码</label>
                 <div class="col-md-6 col-sm-10">
-                    <input type="text" class="form-control" name="repassword" value="admin@123" required="required" placeholder="确认密码" onkeyup="this.value=this.value.replace(/\s/g,'')">
+                    <input type="password" class="form-control" name="repassword" required="required" minlength="8" maxlength="128" autocomplete="new-password" placeholder="确认密码">
                 </div>
             </div>
             <div class="form-group">
@@ -129,8 +140,8 @@ if ($state !== 'checked') {
         var message = document.querySelector('.message');
 
         password.onblur = function() {
-            if (this.value.length < 8 || this.value.length > 18) {
-                message.innerHTML = '密码长度错误,应为8~18位';
+            if (this.value.length < 8 || this.value.length > 128) {
+                message.innerHTML = '密码长度错误,应为8~128位';
                 message.className = 'message wrong';
             } else {
                 message.innerHTML = '密码长度正确';

@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../app/function.php';
+require_once __DIR__ . '/functions.php';
 clearstatcache();
 // 存在程序锁则跳转主页
 if (file_exists(APP_ROOT . '/config/install.lock')) {
@@ -121,10 +122,16 @@ function checkPASS($name)
         <p class="text-danger">如果你不想安装上述PHP扩展或跳过安装过程请删除<code>install</code>目录 <a href="https://www.kancloud.cn/easyimage/easyimage/2635850" target="_blank" class="btn btn-mini btn-primary">跳过安装页面</a></p>
         <a href="./index.php"><button class="btn btn-danger" type="button">请满足上述要求后点击刷新</button></a>
     <?php else : ?>
+        <?php $installToken = install_issue_token('environment'); ?>
+        <?php if ($installToken === false) : ?>
+            <p class="text-danger">无法创建安全安装会话，请检查 PHP Session 和随机数扩展。</p>
+        <?php else : ?>
         <form action="install.php" method="post">
             <input type="hidden" name="check" value="checked" readonly>
+            <input type="hidden" name="install_token" value="<?php echo htmlspecialchars($installToken, ENT_QUOTES, 'UTF-8'); ?>">
             <input type="submit" class="btn btn-primary" value="下一步(1/2)">
         </form>
+        <?php endif; ?>
     <?php endif; ?>
     <!-- install bottom HTML start -->
     <div class="modal fade" id="myModal">

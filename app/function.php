@@ -271,7 +271,7 @@ function _login($user = null, $password = null)
             // 判断账号是否存在
             if ($browser_cookie[0] !== $config['user'] && !array_key_exists($browser_cookie[0], $guestConfig)) return json_encode(array('code' => 400, 'level' => 0, 'messege' => '账号不存在'));
             // 判断是否管理员
-            if ($browser_cookie[0] === $config['user'] && $browser_cookie[1] === $config['password']) return json_encode(array('code' => 200, 'level' => 1, 'messege' => '尊敬的管理员'));
+            if (!empty($config['user']) && !empty($config['password']) && $browser_cookie[0] === $config['user'] && $browser_cookie[1] === $config['password']) return json_encode(array('code' => 200, 'level' => 1, 'messege' => '尊敬的管理员'));
             // 判断是否上传者
             if (array_key_exists($browser_cookie[0], $guestConfig) && $browser_cookie[1] === $guestConfig[$browser_cookie[0]]['password']) {
                 // 判断上传者是否过期
@@ -290,7 +290,7 @@ function _login($user = null, $password = null)
     $user = strip_tags($user);
     $password = strip_tags($password);
     // 是否管理员
-    if ($user === $config['user'] && $password === $config['password']) {
+    if (!empty($config['user']) && !empty($config['password']) && $user === $config['user'] && $password === $config['password']) {
         // 将账号密码序列化后存储
         $browser_cookie = json_encode(array($user, $password));
         set_auth_cookie($browser_cookie, time() + 3600 * 24 * 14);
@@ -346,7 +346,7 @@ function checkLogin()
         }
 
         // 管理员登陆
-        if ($getCOK[0] === $config['user'] && $getCOK[1] === $config['password']) {
+        if (!empty($config['user']) && !empty($config['password']) && $getCOK[0] === $config['user'] && $getCOK[1] === $config['password']) {
             return 204;
         }
 
