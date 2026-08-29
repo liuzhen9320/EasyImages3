@@ -77,6 +77,33 @@ function set_auth_cookie($value, $expires)
 }
 
 /**
+ * Keep configuration updates inside the settings form's explicit field list.
+ */
+function filter_config_update($post, $current, $allowedKeys)
+{
+    $protectedKeys = array('_csrf', 'update', 'user', 'password', 'admin_form', 'uploader_form', 'delDir');
+    $allowedKeys = array_diff($allowedKeys, $protectedKeys);
+    $filtered = array_intersect_key($post, array_flip($allowedKeys));
+
+    foreach ($filtered as $key => $value) {
+        if (!array_key_exists($key, $current) || is_array($value) !== is_array($current[$key])) {
+            unset($filtered[$key]);
+            continue;
+        }
+        if (is_array($value)) {
+            foreach ($value as $item) {
+                if (!is_scalar($item)) {
+                    unset($filtered[$key]);
+                    break;
+                }
+            }
+        }
+    }
+
+    return $filtered;
+}
+
+/**
  * 判断GIF图片是否为动态
  * @param $filename string 文件
  * @return int 是|否

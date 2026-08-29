@@ -38,22 +38,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !csrf_validate(isset($_POST['_csrf'
 
 // 修改config配置
 if (isset($_POST['update'])) {
-    $postArr = $_POST;
-
-    if (isset($postArr['user'])) {
-        if ($postArr['user'] == $guestConfig[$postArr['user']])
-            echo '
-            <script>
-            new $.zui.Messager("管理员账号不能与上传者账号相同!", {
-                type: "danger", // 定义颜色主题 
-                icon: "exclamation-sign" // 定义消息图标
-            }).show();
-            </script>
-            ';
-        exit(header("refresh:1;"));
-    }
+    $allowed_config_keys = array(
+        'NProgress_Progress', 'NProgress_default', 'TinyPng_key', 'ad_bot',
+        'ad_bot_info', 'ad_top', 'ad_top_info', 'admin_path_status', 'allowed',
+        'apiStatus', 'auto_delete', 'cache_freq', 'captcha', 'chart_on',
+        'checkEnv', 'checkImg', 'checkImg_value', 'check_ip', 'check_ip_list',
+        'check_ip_model', 'chunks', 'compress', 'compress_ratio', 'customize',
+        'dark-mode', 'description', 'domain', 'extensions', 'file_manage',
+        'footer', 'ftp_complete_del_local', 'ftp_delloc_sync', 'ftp_host',
+        'ftp_pass', 'ftp_pasv', 'ftp_port', 'ftp_ssl', 'ftp_status', 'ftp_time',
+        'ftp_user', 'guest_path_status', 'hide', 'hide_key', 'hide_path',
+        'history', 'image_recycl', 'image_x', 'image_y', 'imgConvert', 'imgName',
+        'imgRatio', 'imgRatio_crop', 'imgRatio_preserve_headers',
+        'imgRatio_quality', 'imgurl', 'info_rand_pic', 'ip_upload_counts',
+        'keywords', 'language', 'listDate', 'listNumber', 'login_bg', 'maxHeight',
+        'maxSize', 'maxUploadFiles', 'maxWidth', 'md5_black', 'md5_blacklist',
+        'mime', 'minHeight', 'minWidth', 'moderatecontent_key', 'mustLogin',
+        'notice', 'notice_status', 'nsfwjs_url', 'public', 'public_list', 'report',
+        'set_notice', 'showSort', 'showSwitch', 'show_admin_inc',
+        'show_exif_info', 'show_user_hash_del', 'static_cdn', 'static_cdn_url',
+        'storage_path', 'terms', 'textColor', 'textFont', 'textSize', 'theme',
+        'thumbnail', 'thumbnail_h', 'thumbnail_w', 'timezone', 'tips', 'title',
+        'token_path_status', 'token_suffix_ID', 'upload_first_show',
+        'upload_logs', 'waterImg', 'waterPosition', 'waterText', 'watermark'
+    );
+    $postArr = filter_config_update($_POST, $config, $allowed_config_keys);
 
     $new_config = array_replace($config, $postArr);
+    unset($new_config['update'], $new_config['delDir'], $new_config['_csrf']);
     cache_write($config_file, $new_config);
     echo '
   <script>
@@ -172,8 +184,13 @@ if (isset($_POST['delete_guest'])) {
 
 //  添加管理员修改config.php
 if (isset($_POST['admin_form'])) {
-    $postArr = $_POST;
-    if (isset($guestConfig[$postArr['user']])) {
+    $admin_user = isset($_POST['user']) && is_string($_POST['user']) ? trim($_POST['user']) : '';
+    $admin_password = isset($_POST['password']) && is_string($_POST['password']) ? $_POST['password'] : '';
+    if ($admin_user === '' || !preg_match('/^[a-f0-9]{64}$/i', $admin_password)) {
+        http_response_code(400);
+        exit('Invalid administrator credentials');
+    }
+    if (isset($guestConfig[$admin_user])) {
         echo '
         <script>
             new $.zui.Messager("管理员账号不能与上传者账号相同!", {
@@ -184,7 +201,7 @@ if (isset($_POST['admin_form'])) {
         ';
         exit(header("refresh:3;"));
     }
-    $postArr = array('user' => $postArr['user'], 'password' => $postArr['password']);
+    $postArr = array('user' => $admin_user, 'password' => strtolower($admin_password));
 
     $new_config = array_replace($config, $postArr);
     cache_write($config_file, $new_config);
