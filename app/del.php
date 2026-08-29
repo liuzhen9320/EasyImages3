@@ -22,14 +22,14 @@ if (empty($_REQUEST)) {
 
 // 解密删除
 if (isset($_GET['hash'])) {
-    $delHash = $_GET['hash'];
-    $delHash = urlHash($delHash, 1);
+    $delHash = urlHash($_GET['hash'], 1);
+    $delPath = normalize_storage_web_path($delHash);
 
-    if ($config['image_recycl']) {
+    if ($delPath !== false && $config['image_recycl']) {
         // 如果开启回收站则进入回收站
-        if (checkImg($delHash, 3, 'recycle/') === true) {
+        if (checkImg($delPath, 3, 'recycle/') === true) {
 
-            any_upload($delHash, $delHash, 'delete'); // FTP删除
+            any_upload($delPath, $delPath, 'delete'); // FTP删除
 
             exit(json_encode(array(
                 'code' => 200,
@@ -37,7 +37,7 @@ if (isset($_GET['hash'])) {
                 'type' => 'success',
                 'icon' => 'ok-sign',
                 'mode' => 'delete',
-                'url'  => $delHash
+                'url'  => $delPath
             ), JSON_UNESCAPED_UNICODE));
         } else {
             exit(json_encode(array(
@@ -46,13 +46,11 @@ if (isset($_GET['hash'])) {
                 'type' => 'danger',
                 'icon' => 'exclamation-sign',
                 'mode' => 'delete',
-                'url'  => $delHash
+                'url'  => $delPath
             ), JSON_UNESCAPED_UNICODE));
         }
-    } else {
-        getDel($delHash, 'url'); // 直接删除
-
-        any_upload($delHash, $delHash, 'delete'); // FTP删除
+    } elseif ($delPath !== false && (getDel($delPath, 'url') || !empty($config['ftp_status']))) {
+        any_upload($delPath, $delPath, 'delete'); // FTP删除
 
         exit(json_encode(array(
             'code' => 200,
@@ -60,7 +58,7 @@ if (isset($_GET['hash'])) {
             'type' => 'success',
             'icon' => 'ok-sign',
             'mode' => 'delete',
-            'url'  => $delHash
+            'url'  => $delPath
         ), JSON_UNESCAPED_UNICODE));
     }
     exit(json_encode(array(
@@ -69,7 +67,7 @@ if (isset($_GET['hash'])) {
         'type' => 'danger',
         'icon' => 'exclamation-sign',
         'mode' => 'delete',
-        'url'  => $delHash
+        'url'  => $delPath
     ), JSON_UNESCAPED_UNICODE));
 }
 
@@ -87,12 +85,14 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !csrf_validate(isset($_POST['_csrf'
 
 // 广场 - 批量删除文件
 if (isset($_POST['del_url_array'])) {
-    $del_url_array = $_POST['del_url_array'];
+    $del_url_array = is_array($_POST['del_url_array']) ? $_POST['del_url_array'] : array();
     $del_num = count($del_url_array);
     for ($i = 0; $i < $del_num; $i++) {
-        getDel($del_url_array[$i], 'url');
-        // FTP删除
-        any_upload($del_url_array[$i], $del_url_array[$i], 'delete');
+        $delPath = normalize_storage_web_path($del_url_array[$i]);
+        if ($delPath !== false) {
+            getDel($delPath, 'url');
+            any_upload($delPath, $delPath, 'delete');
+        }
     }
     echo json_encode(array(
         'code' => 200,
@@ -106,7 +106,7 @@ if (isset($_POST['del_url_array'])) {
 
 // 广场 - 批量回收文件
 if (isset($_POST['recycle_url_array'])) {
-    $recycle_url_array = $_POST['recycle_url_array'];
+    $recycle_url_array = is_array($_POST['recycle_url_array']) ? $_POST['recycle_url_array'] : array();
     $del_num = count($recycle_url_array);
     for ($i = 0; $i < $del_num; $i++) {
         checkImg($recycle_url_array[$i], 3);
@@ -117,9 +117,11 @@ $postURL = isset($_POST['url']) && is_string($_POST['url']) ? strip_tags($_POST[
 
 // 广场|日志 - 单文件删除
 if (isset($_POST['mode']) && $_POST['mode'] === 'delete') {
-    $reslut = easyimage_delete($postURL, 'url');
-    // FTP删除
-    any_upload($postURL, $postURL, 'delete');
+    $delPath = normalize_storage_web_path($postURL);
+    $reslut = $delPath !== false && easyimage_delete($delPath, 'url');
+    if ($delPath !== false) {
+        any_upload($delPath, $delPath, 'delete');
+    }
 
     if ($reslut) {
         exit(json_encode(array(
@@ -144,8 +146,8 @@ if (isset($_POST['mode']) && $_POST['mode'] === 'delete') {
 
 // 广场|日志 - 回收文件
 if (isset($_POST['mode']) && $_POST['mode'] === 'recycle') {
-    if (is_file(APP_ROOT . $postURL)) {
-        checkImg($postURL, 3);
+    $recyclePath = normalize_storage_web_path($postURL);
+    if ($recyclePath !== false && checkImg($recyclePath, 3) === true) {
         exit(json_encode(array(
             'code' => 200,
             'msg' => '回收成功',
@@ -168,29 +170,26 @@ if (isset($_POST['mode']) && $_POST['mode'] === 'recycle') {
 
 // 管理页面 - 删除版本信息文件
 if (isset($_POST['mode']) && $_POST['mode'] === 'del_version_file') {
-    try {
-        @unlink(APP_ROOT . $postURL);
-        $re = json_encode(array(
+    $versionFile = APP_ROOT . '/admin/logs/version/version.json';
+    if ($postURL === '/admin/logs/version/version.json' && is_file($versionFile) && unlink($versionFile)) {
+        exit(json_encode(array(
             'code' => 200,
             'msg'  => '删除成功',
             'type' => 'success',
             'icon' => 'ok-sign',
             'mode' => 'delete',
             'url'  => $postURL
-        ), JSON_UNESCAPED_UNICODE);
-        throw new Exception('更新版本号失败');
-    } catch (Exception $e) {
-        $re = json_encode(array(
-            'code' => 404,
-            'msg'  => $e->getMessage(),
-            'type' => 'danger',
-            'icon' => 'exclamation-sign',
-            'mode' => 'delete',
-            'url'  => $postURL
-        ), JSON_UNESCAPED_UNICODE);
-    } finally {
-        exit($re);
+        ), JSON_UNESCAPED_UNICODE));
     }
+
+    exit(json_encode(array(
+        'code' => 404,
+        'msg'  => '更新版本号失败',
+        'type' => 'danger',
+        'icon' => 'exclamation-sign',
+        'mode' => 'delete',
+        'url'  => $postURL
+    ), JSON_UNESCAPED_UNICODE));
 }
 
 // 管理页面 - 回收站恢复文件
@@ -311,7 +310,10 @@ if (isset($_POST['url_admin_inc'])) {
 
     $del_url = $_POST['url_admin_inc'];
     if ($config['hide_path']) {
-        $del_url = $config['domain'] . $config['path'] . parse_url($del_url)['path'];
+        $hiddenPath = is_string($del_url) ? parse_url($del_url, PHP_URL_PATH) : false;
+        $del_url = is_string($hiddenPath)
+            ? rtrim($config['path'], '/') . '/' . ltrim($hiddenPath, '/')
+            : false;
     }
 
     if (easyimage_delete($del_url, 'url') === TRUE) {

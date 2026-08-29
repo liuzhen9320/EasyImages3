@@ -939,67 +939,90 @@ function urlHash($data, $mode, $key = null)
 }
 
 /**
- * 删除指定文件
- * @param $url string 文件
- * @param $type string 模式
+ * Normalize a URL or web path and keep it inside the configured image storage.
+ */
+function normalize_storage_web_path($url)
+{
+    global $config;
+
+    if (!is_string($url) || $url === '' || strpos($url, "\0") !== false) {
+        return false;
+    }
+
+    $parts = parse_url(trim($url));
+    if ($parts === false || !isset($parts['path']) || !is_string($parts['path'])) {
+        return false;
+    }
+
+    $path = rawurldecode($parts['path']);
+    if ($path === '' || strpos($path, "\0") !== false) {
+        return false;
+    }
+
+    $path = str_replace('\\', '/', $path);
+    $segments = explode('/', ltrim($path, '/'));
+    $normalized = array();
+    foreach ($segments as $segment) {
+        if ($segment === '' || $segment === '.') {
+            continue;
+        }
+        if ($segment === '..') {
+            return false;
+        }
+        $normalized[] = $segment;
+    }
+
+    $path = '/' . implode('/', $normalized);
+    $storagePath = '/' . trim(str_replace('\\', '/', $config['path']), '/') . '/';
+    if ($path === rtrim($storagePath, '/') || strpos($path, $storagePath) !== 0) {
+        return false;
+    }
+
+    return $path;
+}
+
+/**
+ * Resolve an existing image without following a path outside image storage.
+ */
+function resolve_storage_file($url)
+{
+    global $config;
+
+    $webPath = normalize_storage_web_path($url);
+    $storageRoot = realpath(APP_ROOT . $config['path']);
+    if ($webPath === false || $storageRoot === false) {
+        return false;
+    }
+
+    $candidate = APP_ROOT . $webPath;
+    if (is_link($candidate)) {
+        return false;
+    }
+
+    $resolved = realpath($candidate);
+    $prefix = rtrim($storageRoot, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
+    if ($resolved === false || strpos($resolved, $prefix) !== 0 || !is_file($resolved)) {
+        return false;
+    }
+
+    return $resolved;
+}
+
+/**
+ * Delete an existing file only from image storage.
  */
 function getDel($url, $type)
 {
-    global $config;
-    // url本地化
-    $url = htmlspecialchars(str_replace($config['domain'], '', $url)); // 过滤html 获取url path
-    $url = urldecode(trim($url));
-
-    if ($type == 'url') {
-        $url = APP_ROOT . $url;
-    }
-    if ($type == 'hash') {
-        $url = APP_ROOT . $url;
-    }
-
-    // 文件是否存在 限制删除目录
-    if (is_file($url) && strrpos($url, $config['path'])) {
-        // 执行删除
-        if (@unlink($url)) {
-            return TRUE;
-        } else {
-            return FALSE;
-        }
-    }
+    return easyimage_delete($url, $type);
 }
 
-
 /**
- * 删除指定文件
- * @param $url string 文件
- * @param $type string 模式
+ * Delete an existing file only from image storage.
  */
 function easyimage_delete($url, $type)
 {
-    global $config;
-    // url本地化
-    $url = htmlspecialchars(str_replace($config['domain'], '', $url)); // 过滤html 获取url path
-    $url = urldecode(trim($url));
-
-    if ($type == 'url') {
-        $url = APP_ROOT . $url;
-    }
-    if ($type == 'hash') {
-        $url = APP_ROOT . $url;
-    }
-
-    // 文件是否存在 限制删除目录
-    if (is_file($url) && strrpos($url, $config['path'])) {
-        // 执行删除
-        if (@unlink($url)) {
-            return TRUE;
-        } else {
-            return FALSE;
-        }
-    }
-    return FALSE;
-    // 清除查询
-    clearstatcache();
+    $file = resolve_storage_file($url);
+    return $file !== false && @unlink($file);
 }
 
 /**
@@ -1251,6 +1274,7 @@ function nsfwjs_json($url, $data = '')
 function checkImg($imageUrl, $type = 1, $dir = 'suspic/')
 {
     global $config;
+    $bad_pic = false;
 
     /** # 使用moderatecontent */
     if ($type === 1) {
@@ -1322,29 +1346,38 @@ function checkImg($imageUrl, $type = 1, $dir = 'suspic/')
 
     /** # 如果违规则移动图片到违规文件夹 */
     if ($bad_pic === true) {
-        $old_path = APP_ROOT . parse_url($imageUrl)['path'];   // 提交网址中的文件路径 /i/2021/10/29/p8vypd.png
-        $name = parse_url($imageUrl)['path'];                  // 获得图片的相对地址
-        $name = str_replace($config['path'], '', $name);       // 去除 path目录
-        $name = str_replace('/', '_', $name);                  // 文件名 2021_10_30_p8vypd.png
-        $new_path = APP_ROOT . $config['path'] . $dir . $name; // 新路径含文件名
-        $suspic_dir = APP_ROOT . $config['path'] . $dir;       // suspic路径
-
-        if (!is_dir($suspic_dir)) {                            // 创建suspic目录并移动
-            mkdir($suspic_dir, 0777, true);
-        }
-        if (is_file($old_path)) {
-            rename($old_path, $new_path);
-
-            // FTP
-            if ($config['ftp_status'] === 1) {
-                any_upload(parse_url($imageUrl)['path'], $config['path'] . $dir . $name, 'rename');
-            }
-
-            return true;
-        } else {
+        $dir = trim(str_replace('\\', '/', $dir), '/') . '/';
+        if (!in_array($dir, array('recycle/', 'suspic/'), true)) {
             return false;
         }
+
+        $old_path = resolve_storage_file($imageUrl);
+        $old_web_path = normalize_storage_web_path($imageUrl);
+        $storage_root = realpath(APP_ROOT . $config['path']);
+        if ($old_path === false || $old_web_path === false || $storage_root === false) {
+            return false;
+        }
+
+        $relative_name = substr($old_path, strlen(rtrim($storage_root, DIRECTORY_SEPARATOR)) + 1);
+        $name = str_replace(array('/', '\\'), '_', $relative_name);
+        $suspic_dir = $storage_root . DIRECTORY_SEPARATOR . $dir;
+        if (!is_dir($suspic_dir) && !mkdir($suspic_dir, 0777, true) && !is_dir($suspic_dir)) {
+            return false;
+        }
+
+        $new_path = $suspic_dir . $name;
+        if (file_exists($new_path) || !rename($old_path, $new_path)) {
+            return false;
+        }
+
+        if ($config['ftp_status'] === 1) {
+            any_upload($old_web_path, $config['path'] . $dir . $name, 'rename');
+        }
+
+        return true;
     }
+
+    return false;
 }
 
 /**
@@ -1355,17 +1388,48 @@ function re_checkImg($name, $dir = 'suspic/')
 {
     global $config;
 
-    $fileToPath = str_replace('_', '/', $name);                 // 将图片名称还原为带路径的名称，eg:2021_11_03_pbmn1a.jpg =>2021/11/03/pbmn1a.jpg
-    $now_path_file = APP_ROOT . $config['path'] . $dir . $name; // 当前图片绝对位置 */i/suspic/2021_10_30_p8vypd.png
-    if (is_file($now_path_file)) {
-        $to_file = APP_ROOT . $config['path'] . $fileToPath;    // 要还原图片的绝对位置 */i/2021/10/30/p8vypd.png
-        rename($now_path_file, $to_file);                       // 移动文件
-        // FTP
-        if ($config['ftp_status'] === 1) {
-            any_upload($config['path'] . $dir . $name, $config['path'] . $fileToPath, 'rename');
-        }
-        return true;
+    $dir = trim(str_replace('\\', '/', $dir), '/') . '/';
+    if (!is_string($name) || $name === '' || strpos($name, "\0") !== false
+        || basename(str_replace('\\', '/', $name)) !== $name
+        || !in_array($dir, array('recycle/', 'suspic/'), true)) {
+        return false;
     }
+
+    $fileToPath = str_replace('_', '/', $name);
+    foreach (explode('/', $fileToPath) as $segment) {
+        if ($segment === '' || $segment === '.' || $segment === '..') {
+            return false;
+        }
+    }
+
+    $sourceWebPath = normalize_storage_web_path($config['path'] . $dir . $name);
+    $destinationWebPath = normalize_storage_web_path($config['path'] . $fileToPath);
+    $source = resolve_storage_file($sourceWebPath);
+    $storageRoot = realpath(APP_ROOT . $config['path']);
+    if ($source === false || $destinationWebPath === false || $storageRoot === false) {
+        return false;
+    }
+
+    $quarantineRoot = realpath($storageRoot . DIRECTORY_SEPARATOR . rtrim($dir, '/'));
+    $quarantinePrefix = $quarantineRoot === false ? '' : rtrim($quarantineRoot, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
+    if ($quarantineRoot === false || strpos($source, $quarantinePrefix) !== 0) {
+        return false;
+    }
+
+    $destination = APP_ROOT . $destinationWebPath;
+    $destinationParent = realpath(dirname($destination));
+    $storagePrefix = rtrim($storageRoot, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
+    if ($destinationParent === false || ($destinationParent !== $storageRoot && strpos($destinationParent, $storagePrefix) !== 0)
+        || file_exists($destination)
+        || !rename($source, $destination)) {
+        return false;
+    }
+
+    if ($config['ftp_status'] === 1) {
+        any_upload($sourceWebPath, $destinationWebPath, 'rename');
+    }
+
+    return true;
 }
 
 /**

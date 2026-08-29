@@ -50,3 +50,6 @@ jobs:
 
       - name: Test trusted proxy IP handling
         run: bash tests/trusted_proxy_ip.sh
+
+      - name: Test deletion path containment
+        run: bash tests/deletion_path_containment.sh
