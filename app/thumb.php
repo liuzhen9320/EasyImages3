@@ -77,32 +77,32 @@ $ALLOWED_SITES = array(
 /**
  * 修复无法生成生成webp动态图片的缩略图bug
  */
+$i404 = APP_ROOT . '/public/images/404.png';
+
 if (isset($_GET['img'])) {
 
     // 引入文件
     require_once __DIR__ . '/TimThumb.php';
-    $src = $_GET['img'];
-
-    // 重定向不包含存储路径的缩略图地址
-    if (!stristr($src, $config['path'])) {
-        $src = $config['path'] . $src;
-        header("Location:thumb.php?img=$src");
-        exit();
+    $requestedPath = str_replace('\\', '/', $_GET['img']);
+    $storagePath = '/' . trim(str_replace('\\', '/', $config['path']), '/') . '/';
+    if (strpos('/' . ltrim($requestedPath, '/'), $storagePath) !== 0) {
+        $requestedPath = $storagePath . ltrim($requestedPath, '/');
     }
 
-    // 图片绝对路径
-    $src = APP_ROOT . $_GET['img'];
-    // 获取文件后缀
-    $ext =  pathinfo($src)['extension'];
-    // 404 文件
-    $i404 = APP_ROOT . '/public/images/404.png';
+    $storageRoot = realpath(APP_ROOT . $storagePath);
+    $src = strpos($requestedPath, "\0") === false ? realpath(APP_ROOT . '/' . ltrim($requestedPath, '/')) : false;
+    $storagePrefix = $storageRoot === false ? false : rtrim($storageRoot, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
 
-    // 文件不存在
-    if (!is_file($src)) {
-        // 输出404
+    // 文件不存在或真实路径逃逸出图片存储目录
+    if ($src === false || $storagePrefix === false || strpos($src, $storagePrefix) !== 0 || !is_file($src)) {
         header("Content-type: image/png");
         exit(file_get_contents($i404, true));
     }
+
+    // TimThumb仅接收校验后的站内规范路径
+    $_GET['img'] = '/' . ltrim(substr($src, strlen(APP_ROOT)), '/');
+    // 获取文件后缀
+    $ext = strtolower(pathinfo($src, PATHINFO_EXTENSION));
 
     switch ($ext) {
         case 'ico':
