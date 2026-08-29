@@ -956,7 +956,7 @@ auto_delete(); //定时删除
                 <p class="text-ellipsis">IP: <?php echo real_ip() . ip2region(real_ip()); ?></p>
 
                 <p class="text-ellipsis">配置文件更新日期：<?php echo date('Y-m-d H:i:s', filemtime($config_file)); ?></p>
-                <p class="text-ellipsis">Browser: <?php echo $_SERVER['HTTP_USER_AGENT']; ?></p>
+                <p class="text-ellipsis">Browser: <?php echo htmlspecialchars(isset($_SERVER['HTTP_USER_AGENT']) ? $_SERVER['HTTP_USER_AGENT'] : '', ENT_QUOTES, 'UTF-8'); ?></p>
                 <h5>图床信息</h5>
                 <hr />
                 <h6>API 插件</h6>

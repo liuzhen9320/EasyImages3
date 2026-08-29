@@ -45,6 +45,44 @@ try {
     require_once APP_ROOT . '/app/footer.php';
     exit;
 }
+
+$escapeLogValue = function ($value) {
+    return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
+};
+$logRows = array();
+foreach ($logs as $name => $values) {
+    $source = isset($values['source']) ? $values['source'] : '';
+    $date = isset($values['date']) ? $values['date'] : '';
+    $ip = isset($values['ip']) && filter_var($values['ip'], FILTER_VALIDATE_IP) ? $values['ip'] : '0.0.0.0';
+    $port = isset($values['port']) ? $values['port'] : '';
+    $userAgent = isset($values['user_agent']) ? $values['user_agent'] : '';
+    $path = isset($values['path']) ? $values['path'] : '';
+    $md5 = isset($values['md5']) ? $values['md5'] : '';
+    $size = isset($values['size']) ? $values['size'] : '';
+    $checkImg = isset($values['checkImg']) ? $values['checkImg'] : 'OFF';
+    $from = isset($values['from']) ? $values['from'] : 'web';
+    $safePath = $escapeLogValue($path);
+    $viewUrl = $escapeLogValue(rand_imgurl() . $path);
+    $infoUrl = '/app/info.php?img=' . rawurlencode($path);
+
+    $logRows[] = array(
+        'orgin' => $escapeLogValue($name),
+        'source' => '<input class="form-control input-sm" type="text" value="' . $escapeLogValue($source) . '" readonly>',
+        'date' => $escapeLogValue($date),
+        'ip' => '<a href="http://freeapi.ipip.net/' . rawurlencode($ip) . '" target="_blank">' . $escapeLogValue($ip . ':' . $port) . '</a>',
+        'ip2region' => ip2region($ip),
+        'user_agent' => '<input class="form-control input-sm" type="text" value="' . $escapeLogValue($userAgent) . '" readonly>',
+        'path' => '<input class="form-control input-sm" type="text" value="' . $safePath . '" readonly>',
+        'md5' => '<input class="form-control input-sm" type="text" value="' . $escapeLogValue($md5) . '" readonly>',
+        'size' => $escapeLogValue($size),
+        'checkImg' => strstr('OFF', $checkImg) ? '否' : '是',
+        'from' => is_string($from) ? '网页' : 'API: ' . $escapeLogValue($from),
+        'manage' => '<div class="btn-group"><a href="' . $viewUrl . '" target="_blank" class="btn btn-mini btn-success">查看</a> '
+            . '<a href="' . $infoUrl . '" target="_blank" class="btn btn-mini">信息</a>'
+            . '<a href="#" data-path="' . $safePath . '" onclick="ajax_post(this.getAttribute(\'data-path\'),\'recycle\')" class="btn btn-mini btn-info">回收</a> '
+            . '<a href="#" data-path="' . $safePath . '" onclick="ajax_post(this.getAttribute(\'data-path\'),\'delete\')" class="btn btn-mini btn-danger">删除</a></div>',
+    );
+}
 ?>
 <div class="col-md-12">
     <div id="logs" class="datagrid table-bordered">
@@ -162,23 +200,7 @@ try {
                     width: 0.1
                 },
             ],
-            array: [
-                <?php foreach ($logs as $k => $v) : ?> {
-                        orgin: '<?php echo $k; ?>',
-                        source: '<input class="form-control input-sm" type="text" value="<?php echo $v['source']; ?>" readonly>',
-                        date: '<?php echo $v['date']; ?>',
-                        ip: '<a href="http://freeapi.ipip.net/<?php echo $v['ip']; ?>" target="_blank"><?php echo $v['ip'] . ':' . $v['port']; ?></a>', // 备用IP查询: https://www.ip138.com/iplookup.asp?ip= http://ip.tool.chinaz.com/$ip
-                        ip2region: '<?php echo ip2region($v['ip']); ?>',
-                        user_agent: '<input class="form-control input-sm" type="text" value="<?php echo $v['user_agent']; ?>" readonly>',
-                        path: '<input class="form-control input-sm" type="text" value="<?php echo $v['path']; ?>" readonly>',
-                        md5: '<input class="form-control input-sm" type="text" value="<?php echo $v['md5']; ?>" readonly>',
-                        size: '<?php echo $v['size']; ?>',
-                        checkImg: '<?php echo strstr('OFF', $v['checkImg']) ? '否' : '是'; ?>',
-                        from: '<?php echo is_string($v['from']) ? "网页" : 'API: ' . $v['from']; ?>',
-                        manage: '<div class="btn-group"><a href="<?php echo rand_imgurl() . $v['path']; ?>" target="_blank" class="btn btn-mini btn-success">查看</a> <a href="/app/info.php?img=<?php echo $v['path']; ?>" target="_blank" class="btn btn-mini">信息</a><a href="#" onclick="ajax_post(\'<?php echo $v['path']; ?>\',\'recycle\')" class="btn btn-mini btn-info">回收</a> <a href="#" onclick="ajax_post(\'<?php echo $v['path']; ?>\',\'delete\')" class="btn btn-mini btn-danger">删除</a></div>',
-                    },					
-                <?php endforeach; ?>
-            ]
+            array: <?php echo json_encode($logRows, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>
         },
         sortable: true,
         hoverCell: true,
