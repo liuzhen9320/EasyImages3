@@ -29,6 +29,102 @@ static function path_rtoa($path)
 
 **修复要求**：将文件管理根目录固定到配置的图片存储根；对每个源/目标路径做规范化和目录边界校验，拒绝 `..`、NUL 与符号链接逃逸；所有状态变更仅接受 POST 并统一校验 CSRF Token；移除 GET 写操作。考虑该文件管理器长期无人维护，优先评估删除 `admin/filer.php`，只保留已受限的 `admin/manager.php`。
 
+### 21. 严重 — 安装控制器可被无参数 GET 触发并锁定为公开默认凭据
+
+**文件**: `install/contorl.php:4-31`, `config/config.php:13-16`, `app/function.php:289-297`
+
+发行包不包含 `config/install.lock`。安装控制器虽然按字段读取 POST，但不要求请求方法为 POST，也不要求任何安装流程状态；无论请求是否带参数，都会执行：
+
+```php
+$config_file = APP_ROOT . '/config/config.php';
+cache_write($config_file, $config);
+file_put_contents(APP_ROOT . '/config/install.lock', '安装程序锁定文件。');
+```
+
+因此，攻击者只需在站点完成安装前访问一次 `/install/contorl.php`，就能跳过环境检查和设置表单，使用发行包配置创建安装锁。发行包中的账号为 `admin`，密码值是公开默认密码 `admin@123` 的 SHA-256；登录页正好提交 SHA-256，`_login()` 又直接比较该值，攻击者随后可以默认凭据取得管理员权限。
+
+在临时检出的干净副本中实测，无参数 GET 返回 HTTP 200，`config/install.lock` 从不存在变为存在，响应显示“安装成功”，最终配置满足 `user=admin` 且 `password=sha256('admin@123')`。
+
+**修复要求**：安装提交只接受 POST；通过服务端 Session 保存并验证上一步产生的一次性安装 Token；拒绝空请求和缺失必填字段；发行包不得包含可登录的固定凭据；写配置与创建锁应使用原子、失败即回滚的流程。部署层应在安装完成后移除或禁止访问整个 `install/` 目录。
+
+### 22. 高危 — 正常安装写入 bcrypt，但登录协议仍比较 SHA-256，管理员必然无法登录
+
+**文件**: `install/contorl.php:8-12`, `admin/index.php:146-150`, `admin/index.php:182-191`, `app/function.php:289-297`
+
+安装表单直接提交明文密码，控制器用 `password_hash()` 保存 bcrypt：
+
+```php
+$config['password'] = password_hash($_POST['password'], PASSWORD_DEFAULT);
+```
+
+但管理员登录页仍在浏览器中执行 `SHA256(password.value)`，服务端 `_login()` 没有调用 `password_verify()`，而是把收到的 64 位 SHA-256 与配置中的 bcrypt 字符串直接全等比较：
+
+```php
+if ($user === $config['user'] && $password === $config['password']) {
+```
+
+两种格式永远不可能相等，导致通过正常安装流程设置的管理员凭据不可用。临时副本实测：POST 安装后密码以 `$2y$` 开头且能由 `password_verify()` 验证明文；随后按登录页协议提交该密码的 SHA-256，页面返回“密码错误”。
+
+**修复要求**：统一密码协议。推荐在 HTTPS 下提交明文密码并在服务端使用 `password_verify()`；认证 Cookie 改为随机服务端 Session 标识，不再保存任何密码或密码哈希。对现有 64 位 SHA-256 配置提供一次成功登录后的渐进迁移，管理员修改密码、安装和登录必须共用同一套散列与验证函数，并增加从安装到首次登录的端到端测试。
+
+### 23. 高危 — `admin/manager.php` 的文件写操作仍无 CSRF，且创建/删除/改名使用 GET
+
+**文件**: `config/config.manager.php:22`, `admin/manager.php:311-392`, `admin/manager.php:443-653`, `admin/manager.php:656-870`
+
+EasyImage 的管理器配置把 TinyFileManager 自带认证关闭，因此通过入口处的全站管理员 Cookie 校验后即可执行全部文件操作。管理器没有接入项目的 `csrf_validate()`；保存、上传、复制等 POST 动作不校验 Token，创建、删除、复制、移动、改名等动作甚至由 GET 参数直接触发：
+
+```php
+if (isset($_GET['del']) && !FM_READONLY) { /* 删除 */ }
+if (isset($_GET['new'], $_GET['type']) && !FM_READONLY) { /* 创建 */ }
+if (isset($_GET['ren'], $_GET['to']) && !FM_READONLY) { /* 改名 */ }
+```
+
+认证 Cookie 的 `SameSite=Lax` 不能防住顶层导航发起的跨站 GET。攻击者可诱导已登录管理员打开特制链接，在配置的图片根目录内创建、删除、改名或移动文件；这会造成图片批量破坏，还可能把已有文件改成可由 Web 服务器主动解释的扩展名。
+
+临时副本实测：仅携带合法管理员 Cookie、完全不提交 CSRF Token，访问 `?p=&type=file&new=manager-csrf-audit-20260829.txt` 成功在 `i/` 创建文件；随后访问 `?p=&del=manager-csrf-audit-20260829.txt` 成功删除，两次响应均为 302。
+
+**修复要求**：所有状态变更统一限制为 POST，并在动作分发前校验项目 CSRF Token；GET 只允许查看和下载。表单、AJAX、分片上传均应使用同一 Token 机制。增加请求方法与 CSRF 的回归测试，并升级长期停留在 2.4.7 的 TinyFileManager，或以项目内受维护的最小文件管理功能替代。
+
+### 24. 高危 — BootCSS/BootCDN 投毒事件引发全球开发者供应链信任危机（已修复）
+
+**文件**: `docs/index.html:15`, `docs/index.html:83-93`
+
+文档站的 docsify 主题、主脚本和三个插件共 5 个资源原先由 `cdn.bootcdn.net` 加载。BootCSS/BootCDN 投毒事件使其成为前端供应链风险源，并引发全球开发者对该 CDN 资源完整性与运营可信度的信任危机；继续引用会让文档访问者执行无法再被项目方信任的第三方内容。现已按要求全部替换为相同 docsify 4.13.0 版本的 `cdnjs.cloudflare.com` HTTPS 地址，资源顺序和版本保持不变。
+
+验证结果：全仓已无 `bootcss`、`bootcdn` 或 `cdn.bootcdn.net` 引用；5 个 cdnjs 目标均返回 HTTP 200 且 Content-Type 正确，本地 `/docs/` 返回 HTTP 200。
+
+### 25. 高危 — `admin/manager.php` 远程上传的 SSRF 过滤可被整数 IP 和私网地址绕过
+
+**文件**: `admin/manager.php:566-640`
+
+TinyFileManager 的“从 URL 上传”功能由服务器主动请求用户提供的 HTTP(S) 地址。现有防护只按原始主机字符串拦截 `localhost`、`127.*`、`::1`，并只禁止 4 个端口：
+
+```php
+$domain = parse_url($url, PHP_URL_HOST);
+if (preg_match('/^localhost$|^127...$|...::1$/i', $domain) || in_array($port, $knownPorts)) {
+    exit();
+}
+copy($url, $temp_file, $ctx);
+```
+
+代码没有解析 DNS 后的全部 A/AAAA 地址，也没有拒绝 RFC1918 私网、链路本地、云元数据、保留地址和非标准形式的回环地址；PHP HTTP 包装器还可能跟随未经重新校验的重定向。拥有管理器请求能力的攻击者可借此探测或读取 PHP 进程可访问的内网 HTTP 服务，并把响应保存到公开图片目录。
+
+实测将回环地址 `127.0.0.1` 写成整数 `2130706433` 后，`http://2130706433:28773/public/images/404.png` 未被过滤，接口返回 `{"done":{"name":"404.png"}}`；落盘文件与本机 28773 服务返回的原文件逐字节一致。
+
+**修复要求**：若业务不必需，禁用 URL 上传。否则只允许 HTTP/HTTPS，解析并固定连接目标，对每个 IPv4/IPv6 地址使用 `FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE` 等完整策略校验；拒绝解析结果变化、用户信息、异常端口和非规范 IP；每次重定向都重新解析与校验，限制跳转次数、响应体大小和超时，并避免把响应直接保存到可公开访问目录。
+
+### 26. 高危 — 无条件信任 `X-Forwarded-For`，上传 IP 黑白名单和游客配额可绕过
+
+**文件**: `app/function.php:1462-1536`, `app/function.php:1915-1958`, `app/upload.php:49-76`, `api/index.php:30-40`
+
+`real_ip()` 无论直连来源是否为可信反向代理，都优先采用客户端提供的 `X-Forwarded-For` 或 `Client-IP`，并从中提取第一个看似 IPv4 的片段。上传 IP 黑白名单、网页游客每日上传次数和上传审计日志都依赖这个结果。
+
+任意远程客户端都可以自行设置请求头来轮换 IP、绕过黑名单与每日配额，或冒充白名单地址；日志中的攻击来源也会被污染。该函数还不支持 IPv6，合法 IPv6 地址会归并为 `0.0.0.0`，造成不同用户共享配额和误封。
+
+函数级实测：连接地址固定为 `127.0.0.1` 时，黑名单 `127.0.0.1` 正常阻止；加入 `X-Forwarded-For: 203.0.113.77` 后 `real_ip()` 返回伪造值，黑名单判定变为放行。连接地址为 `198.51.100.20` 时，伪造 `X-Forwarded-For: 192.0.2.10` 也能通过仅允许 `192.0.2.10` 的白名单。
+
+**修复要求**：默认只使用经过 `FILTER_VALIDATE_IP` 验证的 `REMOTE_ADDR`。新增显式可信代理网段配置；仅当直连地址属于可信代理时，才按代理约定从右向左解析转发链，并完整支持 IPv4/IPv6。黑白名单、游客配额、API/登录限流和日志必须统一使用同一个可信客户端地址函数，并增加伪造头、代理链和 IPv6 测试。
+
 ---
 
 ## 🔴 严重 (3)
