@@ -11,7 +11,7 @@ if (isset($_GET['login'])) {
     if ($_GET['login'] = 'logout') {
 
         if (isset($_COOKIE['auth'])) {
-            setcookie('auth', null, time() - 1, '/');
+            set_auth_cookie('', time() - 3600);
             header("Refresh:2;url=../index.php");
             echo '
 				<script>

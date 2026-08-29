@@ -56,6 +56,27 @@ function csrf_validate($token)
 }
 
 /**
+ * Set or clear the authentication cookie with browser security attributes.
+ */
+function set_auth_cookie($value, $expires)
+{
+    $secure = (!empty($_SERVER['HTTPS']) && strtolower($_SERVER['HTTPS']) !== 'off')
+        || (isset($_SERVER['SERVER_PORT']) && (int) $_SERVER['SERVER_PORT'] === 443);
+
+    if (PHP_VERSION_ID >= 70300) {
+        return setcookie('auth', $value, array(
+            'expires' => $expires,
+            'path' => '/',
+            'secure' => $secure,
+            'httponly' => true,
+            'samesite' => 'Lax'
+        ));
+    }
+
+    return setcookie('auth', $value, $expires, '/; SameSite=Lax', '', $secure, true);
+}
+
+/**
  * 判断GIF图片是否为动态
  * @param $filename string 文件
  * @return int 是|否
@@ -173,7 +194,7 @@ function _login($user = null, $password = null)
     if ($user === $config['user'] && $password === $config['password']) {
         // 将账号密码序列化后存储
         $browser_cookie = json_encode(array($user, $password));
-        setcookie('auth', $browser_cookie, time() + 3600 * 24 * 14, '/');
+        set_auth_cookie($browser_cookie, time() + 3600 * 24 * 14);
         return json_encode(array('code' => 200, 'level' => 1, 'messege' => '管理员登录成功'));
     }
     // 是否上传者
@@ -182,7 +203,7 @@ function _login($user = null, $password = null)
         if ($guestConfig[$user]['expired'] < time()) return json_encode(array('code' => 400, 'level' => 0, 'messege' => $user . '账号已过期'));
         // 未过期设置cookie
         $browser_cookie = json_encode(array($user, $password));
-        setcookie('auth', $browser_cookie, time() + 3600 * 24 * 14, '/');
+        set_auth_cookie($browser_cookie, time() + 3600 * 24 * 14);
         return json_encode(array('code' => 200, 'level' => 2, 'messege' => $user . '用户登录成功'));
     }
     // 检查账号是否存在
