@@ -42,9 +42,19 @@ if (isset($_GET['login'])) {
 // 提交登录
 if (isset($_POST['password']) and isset($_POST['user'])) {
 
+    $login_user = is_string($_POST['user']) ? $_POST['user'] : '';
+    $login_password = is_string($_POST['password']) ? $_POST['password'] : '';
+    $retry_after = login_rate_limit($login_user, 'check');
+    if ($retry_after > 0) {
+        write_login_log($login_user, '登录尝试过于频繁');
+        echo '<div class="alert alert-danger">登录尝试过于频繁，请稍后再试。</div>';
+        exit(require_once APP_ROOT . '/app/footer.php');
+    }
+
     // 验证码
     if ($config['captcha']) {
         if (empty($_REQUEST['code'])) {
+            login_rate_limit($login_user, 'failure');
             echo '
             <script>
                 new $.zui.Messager("请填写验证码!", {type: "danger" // 定义颜色主题 
@@ -56,6 +66,7 @@ if (isset($_POST['password']) and isset($_POST['user'])) {
         } else {
             session_start();
             if (strtolower($_REQUEST['code']) !== $_SESSION['code']) {
+                login_rate_limit($login_user, 'failure');
                 echo '
                 <script>
                     new $.zui.Messager("验证码错误!", {type: "danger" // 定义颜色主题 
@@ -68,10 +79,11 @@ if (isset($_POST['password']) and isset($_POST['user'])) {
         }
     }
 
-    $login = _login($_POST['user'], $_POST['password']);
+    $login = _login($login_user, $login_password);
     $login = json_decode($login, true);
 
     if ($login['code'] == 200) {
+        login_rate_limit($login_user, 'reset');
         echo '
         <script> 
             new $.zui.Messager("' . $login["messege"] . '" , {
@@ -81,6 +93,7 @@ if (isset($_POST['password']) and isset($_POST['user'])) {
         </script>';
         header("refresh:2;url=" . $config['domain'] . "");
     } else {
+        login_rate_limit($login_user, 'failure');
         echo '
         <script> 
             new $.zui.Messager("' . $login["messege"] . '" , {
@@ -92,7 +105,7 @@ if (isset($_POST['password']) and isset($_POST['user'])) {
     }
 
     // 登录日志
-    write_login_log($_POST['user'], $login["messege"]);
+    write_login_log($login_user, $login["messege"]);
 }
 ?>
 <link rel="stylesheet" href="<?php static_cdn(); ?>/public/static/login.css">

@@ -1907,6 +1907,88 @@ function write_login_log($user, $msg)
 }
 
 /**
+ * Update one file-backed login rate-limit bucket.
+ */
+function login_rate_limit_bucket($bucket, $action)
+{
+    global $config;
+
+    $maxAttempts = 5;
+    $window = 900;
+    $directory = APP_ROOT . '/admin/logs/security/login-rate/';
+    $file = $directory . hash_hmac('sha256', $bucket, $config['password']) . '.php';
+
+    if ($action === 'reset') {
+        if (is_file($file)) {
+            @unlink($file);
+        }
+        return 0;
+    }
+
+    if (!is_file($file) && $action !== 'failure') {
+        return 0;
+    }
+    if (!is_dir($directory) && !mkdir($directory, 0750, true) && !is_dir($directory)) {
+        return $window;
+    }
+
+    $handle = fopen($file, 'c+');
+    if ($handle === false || !flock($handle, LOCK_EX)) {
+        if ($handle !== false) {
+            fclose($handle);
+        }
+        return $window;
+    }
+
+    $contents = stream_get_contents($handle);
+    $json = strpos($contents, "\n") === false ? '' : substr($contents, strpos($contents, "\n") + 1);
+    $attempts = json_decode($json, true);
+    if (!is_array($attempts)) {
+        $attempts = array();
+    }
+
+    $now = time();
+    $attempts = array_values(array_filter($attempts, function ($timestamp) use ($now, $window) {
+        return is_int($timestamp) && $timestamp > $now - $window;
+    }));
+    if ($action === 'failure') {
+        $attempts[] = $now;
+    }
+
+    rewind($handle);
+    ftruncate($handle, 0);
+    fwrite($handle, '<?php exit; ?>' . PHP_EOL . json_encode($attempts));
+    fflush($handle);
+    flock($handle, LOCK_UN);
+    fclose($handle);
+
+    if (count($attempts) < $maxAttempts) {
+        return 0;
+    }
+
+    return max(1, $window - ($now - $attempts[0]));
+}
+
+/**
+ * Check, record, or reset the IP and account login rate-limit buckets.
+ */
+function login_rate_limit($username, $action = 'check')
+{
+    global $config;
+    global $guestConfig;
+
+    $ip = isset($_SERVER['REMOTE_ADDR']) && filter_var($_SERVER['REMOTE_ADDR'], FILTER_VALIDATE_IP)
+        ? $_SERVER['REMOTE_ADDR'] : '0.0.0.0';
+    $username = is_string($username) ? trim($username) : '';
+    $account = ($username === $config['user'] || array_key_exists($username, $guestConfig))
+        ? strtolower($username) : 'unknown';
+
+    $ipRetry = login_rate_limit_bucket('ip:' . $ip, $action);
+    $accountRetry = login_rate_limit_bucket('account:' . $account, $action);
+    return max($ipRetry, $accountRetry);
+}
+
+/**
  * curl检查远程链接是否有效
  * @param String $url 
  * @param return boll 
