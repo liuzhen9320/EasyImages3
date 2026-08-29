@@ -2,7 +2,7 @@
 
 /**
  * class Ip2Region
- * 为兼容老版本调度而创建
+ * 为兼容老版本调度而创建，封装 ip2region v3.17.0 的 Searcher 类
  * @author Anyon<zoujingli@qq.com>
  * @datetime 2022/07/18
  */
@@ -10,7 +10,7 @@ class Ip2Region
 {
     /**
      * 查询实例对象
-     * @var XdbSearcher
+     * @var \ip2region\xdb\Searcher
      */
     private $searcher;
 
@@ -20,8 +20,11 @@ class Ip2Region
      */
     public function __construct()
     {
-        class_exists('XdbSearcher') or include __DIR__ . '/XdbSearcher.php';
-        $this->searcher = XdbSearcher::newWithFileOnly(__DIR__ . '/ip2region.xdb');
+        class_exists('ip2region\xdb\Searcher') or include __DIR__ . '/Searcher.class.php';
+        $this->searcher = \ip2region\xdb\Searcher::newWithFileOnly(
+            \ip2region\xdb\IPv4::default(),
+            __DIR__ . '/ip2region.xdb'
+        );
     }
 
     /**

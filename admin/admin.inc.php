@@ -995,13 +995,13 @@ auto_delete(); //定时删除
             </div>
             <div class="collapse" id="Ip2Region">
                 <div class="bg-primary with-padding">
-                    <h4>Ip2region - IP地址数据库 <a href="https://raw.githubusercontent.com/lionsoul2014/ip2region/master/data/ip2region.xdb" target="_blank" class="label label-badge">下载 | 更新</a></h4>
+                    <h4>Ip2region - IP地址数据库 <a href="https://raw.githubusercontent.com/lionsoul2014/ip2region/v3.17.0/data/ip2region_v4.xdb" target="_blank" class="label label-badge">下载 | 更新</a></h4>
                     <hr />
                     <p>
-                        Ip2region (2.0 - xdb) 是一个离线 IP 数据管理框架和定位库,支持亿级别的数据段,10微秒级别的查询性能,提供了许多主流编程语言的 xdb 数据管理引擎的实现。
+                        Ip2region (3.0 - xdb) 是一个离线 IP 数据管理框架和定位库,支持亿级别的数据段,10微秒级别的查询性能,提供了许多主流编程语言的 xdb 数据管理引擎的实现。
                         每个 ip 数据段的 region 信息都固定了格式：国家|区域|省份|城市|ISP, 只有中国的数据绝大部分精确到了城市, 其他国家部分数据只能定位到国家, 后前的选项全部是0。
                     </p>
-                    <h6>* 下载 <a href="https://raw.githubusercontent.com/lionsoul2014/ip2region/master/data/ip2region.xdb" target="_blank">ip2region.xdb</a> IP数据库上传到 <small style="color: black;">/app/ip2region/</small> 文件夹, 如遇到下载失败可访问开源地址下载: [ <a href="https://github.com/lionsoul2014/ip2region" target="_blank"><small style="color: black;">Github</small></a> | <a href="https://gitee.com/lionsoul/ip2region" target="_blank"><small style="color: black;">Gitee</small></a> ] 更新方法与此相同。</h6>
+                    <h6>* 下载 <a href="https://raw.githubusercontent.com/lionsoul2014/ip2region/v3.17.0/data/ip2region_v4.xdb" target="_blank">ip2region.xdb</a> IP数据库上传到 <small style="color: black;">/app/ip2region/</small> 文件夹, 如遇到下载失败可访问开源地址下载: [ <a href="https://github.com/lionsoul2014/ip2region" target="_blank"><small style="color: black;">Github</small></a> | <a href="https://gitee.com/lionsoul/ip2region" target="_blank"><small style="color: black;">Gitee</small></a> ] 更新方法与此相同。</h6>
                 </div>
             </div>
             <?php if (getVersion() !== APP_VERSION) : ?>
