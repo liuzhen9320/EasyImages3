@@ -23,6 +23,10 @@
 
 // 设置html为utf8
 header('Content-Type:text/html;charset=utf-8');
+header('X-Content-Type-Options: nosniff');
+header('X-Frame-Options: SAMEORIGIN');
+header('Referrer-Policy: strict-origin-when-cross-origin');
+header("Content-Security-Policy: default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; object-src 'none'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: blob: http: https:; font-src 'self' data: https:; connect-src 'self' http: https:; frame-src 'self' https:; media-src 'self' blob: http: https:; worker-src 'self' blob:");
 // 定义根目录
 define('APP_ROOT', str_replace(DIRECTORY_SEPARATOR, '/', realpath(dirname(__FILE__) . '/../')));
 // 时区设置 https://www.php.net/manual/zh/timezones.php
