@@ -211,7 +211,7 @@ Two engines:
 | `/admin/index.php` | Login | Also handles logout via `?login=logout` |
 | `/admin/admin.inc.php` | Settings | Writes to `config.php`, `api_key.php`, `config.guest.php` |
 | `/admin/chart.php` | Statistics | ECharts + custom chart engine (`zui.chart.php`) |
-| `/admin/manager.php` | File manager | TinyFileManager 2.4.7 (`file_manage` config to disable) |
+| `/admin/manager.php` | File manager | TinyFileManager 2.4.7; local uploads only (`file_manage` config to disable) |
 | `/admin/terms.php` | Terms management | |
 | `/admin/version.php` | Version info | Plain text file, single line `2.8.8` |
 

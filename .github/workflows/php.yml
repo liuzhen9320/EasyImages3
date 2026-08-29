@@ -42,5 +42,8 @@ jobs:
       - name: Test file manager CSRF protection
         run: bash tests/file_manager_csrf.sh
 
+      - name: Test file manager remote upload rejection
+        run: bash tests/file_manager_remote_upload.sh
+
       - name: Test SVG upload rejection
         run: bash tests/svg_upload_rejection.sh

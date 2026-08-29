@@ -600,101 +600,11 @@ if (isset($_POST['ajax']) && !FM_READONLY) {
         echo $res;
     }
 
-    //upload using url
-    if(isset($_POST['type']) && $_POST['type'] == "upload" && !empty($_REQUEST["uploadurl"])) {
-        $path = FM_ROOT_PATH;
-        if (FM_PATH != '') {
-            $path .= '/' . FM_PATH;
-        }
-
-         function event_callback ($message) {
-            global $callback;
-            echo json_encode($message);
-        }
-
-        function get_file_path () {
-            global $path, $fileinfo, $temp_file;
-            return $path."/".basename($fileinfo->name);
-        }
-
-        $url = !empty($_REQUEST["uploadurl"]) && preg_match("|^http(s)?://.+$|", stripslashes($_REQUEST["uploadurl"])) ? stripslashes($_REQUEST["uploadurl"]) : null;
-
-        //prevent 127.* domain and known ports
-        $domain = parse_url($url, PHP_URL_HOST);
-        $port = parse_url($url, PHP_URL_PORT);
-        $knownPorts = [22, 23, 25, 3306];
-
-        if (preg_match("/^localhost$|^127(?:\.[0-9]+){0,2}\.[0-9]+$|^(?:0*\:)*?:?0*1$/i", $domain) || in_array($port, $knownPorts)) {
-            $err = array("message" => "URL is not allowed");
-            event_callback(array("fail" => $err));
-            exit();
-        }
-
-        $use_curl = false;
-        $temp_file = tempnam(sys_get_temp_dir(), "upload-");
-        $fileinfo = new stdClass();
-        $fileinfo->name = trim(basename($url), ".\x00..\x20");
-
-        $allowed = (FM_UPLOAD_EXTENSION) ? explode(',', strtolower(FM_UPLOAD_EXTENSION)) : false;
-        $ext = strtolower(pathinfo($fileinfo->name, PATHINFO_EXTENSION));
-        $isFileAllowed = (($allowed) ? in_array($ext, $allowed, true) : true)
-            && !is_forbidden_svg_upload($fileinfo->name);
-
-        $err = false;
-
-        if(!$isFileAllowed) {
-            $err = array("message" => "File extension is not allowed");
-            event_callback(array("fail" => $err));
-            exit();
-        }
-
-        if (!$url) {
-            $success = false;
-        } else if ($use_curl) {
-            @$fp = fopen($temp_file, "w");
-            @$ch = curl_init($url);
-            curl_setopt($ch, CURLOPT_NOPROGRESS, false );
-            curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-            curl_setopt($ch, CURLOPT_FILE, $fp);
-            @$success = curl_exec($ch);
-            $curl_info = curl_getinfo($ch);
-            if (!$success) {
-                $err = array("message" => curl_error($ch));
-            }
-            @curl_close($ch);
-            fclose($fp);
-            $fileinfo->size = $curl_info["size_download"];
-            $fileinfo->type = $curl_info["content_type"];
-        } else {
-            $ctx = stream_context_create();
-            @$success = copy($url, $temp_file, $ctx);
-            if (!$success) {
-                $err = error_get_last();
-            }
-        }
-
-        if ($success && is_forbidden_svg_upload(
-            $fileinfo->name,
-            isset($fileinfo->type) ? $fileinfo->type : '',
-            $temp_file
-        )) {
-            $success = false;
-            $err = array("message" => "SVG uploads are not allowed");
-        }
-
-        if ($success) {
-            $success = rename($temp_file, get_file_path());
-        }
-
-        if ($success) {
-            event_callback(array("done" => $fileinfo));
-        } else {
-            unlink($temp_file);
-            if (!$err) {
-                $err = array("message" => "Invalid url parameter");
-            }
-            event_callback(array("fail" => $err));
-        }
+    if (isset($_POST['type']) && $_POST['type'] === 'upload') {
+        http_response_code(410);
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode(array('fail' => array('message' => 'Remote URL uploads are disabled')));
+        exit();
     }
 
     exit();
@@ -1324,14 +1234,7 @@ if (isset($_GET['upload']) && !FM_READONLY) {
 
         <div class="card mb-2 fm-upload-wrapper <?php echo fm_get_theme(); ?>">
             <div class="card-header">
-                <ul class="nav nav-tabs card-header-tabs">
-                    <li class="nav-item">
-                        <a class="nav-link active" href="#fileUploader" data-target="#fileUploader"><i class="fa fa-arrow-circle-o-up"></i> <?php echo lng('UploadingFiles') ?></a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="#urlUploader" class="js-url-upload" data-target="#urlUploader"><i class="fa fa-link"></i> Upload from URL</a>
-                    </li>
-                </ul>
+                <i class="fa fa-arrow-circle-o-up"></i> <?php echo lng('UploadingFiles') ?>
             </div>
             <div class="card-body">
                 <p class="card-text">
@@ -1339,7 +1242,7 @@ if (isset($_GET['upload']) && !FM_READONLY) {
                     <?php echo lng('DestinationFolder') ?>: <?php echo fm_enc(fm_convert_win(FM_PATH)) ?>
                 </p>
 
-                <form action="<?php echo htmlspecialchars(FM_SELF_URL) . '?p=' . fm_enc(FM_PATH) ?>" method="post" class="dropzone card-tabs-container" id="fileUploader" enctype="multipart/form-data">
+                <form action="<?php echo htmlspecialchars(FM_SELF_URL) . '?p=' . fm_enc(FM_PATH) ?>" method="post" class="dropzone" id="fileUploader" enctype="multipart/form-data">
                     <?php fm_csrf_field(); ?>
                     <input type="hidden" name="p" value="<?php echo fm_enc(FM_PATH) ?>">
                     <input type="hidden" name="fullpath" id="fullpath" value="<?php echo fm_enc(FM_PATH) ?>">
@@ -1348,16 +1251,6 @@ if (isset($_GET['upload']) && !FM_READONLY) {
                     </div>
                 </form>
 
-                <div class="upload-url-wrapper card-tabs-container hidden" id="urlUploader">
-                    <form id="js-form-url-upload" class="form-inline" onsubmit="return upload_from_url(this);" method="POST" action="">
-                        <?php fm_csrf_field(); ?>
-                        <input type="hidden" name="type" value="upload" aria-label="hidden" aria-hidden="true">
-                        <input type="url" placeholder="URL" name="uploadurl" required class="form-control" style="width: 80%">
-                        <button type="submit" class="btn btn-primary ml-3"><?php echo lng('Upload') ?></button>
-                        <div class="lds-facebook"><div></div><div></div><div></div></div>
-                    </form>
-                    <div id="js-url-upload__list" class="col-9 mt-3"></div>
-                </div>
             </div>
         </div>
     </div>
@@ -4047,26 +3940,6 @@ $isStickyNavBar = $sticky_navbar ? 'navbar-fixed' : 'navbar-normal';
             success: function (data) { if(data) { $pwd.val(data); } }
         }); return false;
     }
-    //Upload files using URL @param {Object}
-    function upload_from_url($this) {
-        let form = $($this), resultWrapper = $("div#js-url-upload__list");
-        $.ajax({
-            type: form.attr('method'), url: form.attr('action'), data: form.serialize()+"&ajax="+true,
-            beforeSend: function() { form.find("input[name=uploadurl]").attr("disabled","disabled"); form.find("button").hide(); form.find(".lds-facebook").addClass('show-me'); },
-            success: function (data) {
-                if(data) {
-                    data = JSON.parse(data);
-                    if(data.done) {
-                        resultWrapper.append('<div class="alert alert-success row">Uploaded Successful: '+data.done.name+'</div>'); form.find("input[name=uploadurl]").val('');
-                    } else if(data['fail']) { resultWrapper.append('<div class="alert alert-danger row">Error: '+data.fail.message+'</div>'); }
-                    form.find("input[name=uploadurl]").removeAttr("disabled");form.find("button").show();form.find(".lds-facebook").removeClass('show-me');
-                }
-            },
-            error: function(xhr) {
-                form.find("input[name=uploadurl]").removeAttr("disabled");form.find("button").show();form.find(".lds-facebook").removeClass('show-me');console.error(xhr);
-            }
-        }); return false;
-    }
     //Search template
     function search_template(data) {
         var response = "";
@@ -4123,12 +3996,6 @@ $isStickyNavBar = $sticky_navbar ? 'navbar-fixed' : 'navbar-normal';
             if (e.keyCode === 13) { fm_search(); }
         });
         $('#search-addon3').on( 'click', function () { fm_search(); });
-        //upload nav tabs
-        $(".fm-upload-wrapper .card-header-tabs").on("click", 'a', function(e){
-            e.preventDefault();let target=$(this).data('target');
-            $(".fm-upload-wrapper .card-header-tabs a").removeClass('active');$(this).addClass('active');
-            $(".fm-upload-wrapper .card-tabs-container").addClass('hidden');$(target).removeClass('hidden');
-        });
     });
 </script>
 <?php if (isset($_GET['edit']) && isset($_GET['env']) && FM_EDIT_FILE):

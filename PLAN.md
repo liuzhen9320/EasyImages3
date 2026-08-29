@@ -97,7 +97,7 @@ if (isset($_GET['ren'], $_GET['to']) && !FM_READONLY) { /* 改名 */ }
 
 验证结果：全仓已无 `bootcss`、`bootcdn` 或 `cdn.bootcdn.net` 引用；5 个 cdnjs 目标均返回 HTTP 200 且 Content-Type 正确，本地 `/docs/` 返回 HTTP 200。
 
-### 25. 高危 — `admin/manager.php` 远程上传的 SSRF 过滤可被整数 IP 和私网地址绕过
+### 25. 高危 — `admin/manager.php` 远程上传的 SSRF 过滤可被整数 IP 和私网地址绕过（已修复）
 
 **文件**: `admin/manager.php:566-640`
 
@@ -116,6 +116,8 @@ copy($url, $temp_file, $ctx);
 实测将回环地址 `127.0.0.1` 写成整数 `2130706433` 后，`http://2130706433:28773/public/images/404.png` 未被过滤，接口返回 `{"done":{"name":"404.png"}}`；落盘文件与本机 28773 服务返回的原文件逐字节一致。
 
 **修复要求**：若业务不必需，禁用 URL 上传。否则只允许 HTTP/HTTPS，解析并固定连接目标，对每个 IPv4/IPv6 地址使用 `FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE` 等完整策略校验；拒绝解析结果变化、用户信息、异常端口和非规范 IP；每次重定向都重新解析与校验，限制跳转次数、响应体大小和超时，并避免把响应直接保存到可公开访问目录。
+
+**修复状态**：已移除远程 URL 上传的服务端抓取实现、上传页入口和前端脚本。旧客户端提交该动作会收到 HTTP 410，服务器不会解析或访问目标 URL；回归测试使用整数形式的回环地址确认请求未到达本地目标服务且未产生落盘文件。本地文件上传功能不受影响。
 
 ### 26. 高危 — 无条件信任 `X-Forwarded-For`，上传 IP 黑白名单和游客配额可绕过
 
