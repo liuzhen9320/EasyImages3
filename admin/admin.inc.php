@@ -590,7 +590,6 @@ auto_delete(); //定时删除
                         <div class="form-group">
                             <label for="logDate" class="text-primary">月份: </label>
                             <input type="text" class="form-control logDate" id="logDate" name="logDate" value="<?php echo date('Y-m'); ?>" required="required" readonly>
-                            <input type="hidden" class="form-control" name="sign" value="<?php echo md5($config['password'] . date('ymdh')); ?>" placeholder="日志访问秘钥">
                         </div>
                         <button type="submit" class="btn btn-primary">查看</button>
                     </form>
@@ -616,7 +615,7 @@ auto_delete(); //定时删除
                 </div>
                 <div class="col-md-1">
                     <h5 class="header-dividing" data-toggle="tooltip" title="仅显示当月">登录日志</h5>
-                    <button type="button" class="btn btn-primary" data-toggle="modal" data-title="登录日志 - 仅显示当月" data-icon="book" data-moveable="true" data-width="60%" data-type="ajax" data-url="../app/viewlog.php?login_log&sign=<?php echo md5($config['password'] . date('ymdh')); ?>">查看</button>
+                    <button type="button" class="btn btn-primary" data-toggle="modal" data-title="登录日志 - 仅显示当月" data-icon="book" data-moveable="true" data-width="60%" data-type="ajax" data-url="../app/viewlog.php?login_log=1">查看</button>
                 </div>
             </div>
             <div class="col-md-12">

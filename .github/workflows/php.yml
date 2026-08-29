@@ -53,3 +53,6 @@ jobs:
 
       - name: Test deletion path containment
         run: bash tests/deletion_path_containment.sh
+
+      - name: Test log viewer path containment
+        run: bash tests/log_viewer_path_containment.sh

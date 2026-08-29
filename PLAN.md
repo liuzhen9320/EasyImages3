@@ -151,6 +151,23 @@ if (is_file($url) && strrpos($url, $config['path'])) {
 
 **修复状态**：新增统一存储路径规范化和文件解析函数，普通删除、批量删除、加密删除链接、回收、恢复及 FTP 同步均经同一边界校验。回收目录仅允许 `recycle/` 和 `suspic/`，恢复目标会验证父目录的真实路径且拒绝覆盖已有文件；版本操作固定为 `admin/logs/version/version.json`。回归测试覆盖有效加密令牌携带穿越路径、双重编码入口、符号链接、正常删除、回收恢复和版本缓存删除。
 
+### 28. 高危 — 上传日志月份可造成路径穿越和本地 PHP 文件包含（已修复）
+
+**文件**: `app/viewlog.php:9-37`, `admin/admin.inc.php:589-619`
+
+上传日志查看器把 POST 的 `logDate` 直接拼接到 `admin/logs/upload/` 后，再通过 `require_once` 加载：
+
+```php
+$logFile = APP_ROOT . '/admin/logs/upload/' . $_POST['logDate'] . '.php';
+require_once $logFile;
+```
+
+管理员会话中的请求可提交 `../../../config/file` 越出日志目录并执行任意已有 PHP 文件。入口另行要求 `md5($config['password'] . date('ymdh'))`，但该值直接嵌入后台表单和 URL，既不能替代 Session 鉴权，又会把密码派生材料暴露给浏览器历史、访问日志和可能的引用来源。
+
+**修复要求**：只接受严格的 `YYYY-MM` 月份并限制月份为 `01` 至 `12`，从固定上传日志目录选择对应文件；继续以管理员服务端 Session 作为唯一访问凭据，移除表单和 URL 中的密码派生签名。
+
+**修复状态**：`logDate` 现在必须匹配合法月份格式，否则返回 HTTP 400 且不会包含任何文件。上传日志和登录日志仅依赖管理员 Session；后台不再生成或传递小时签名。回归测试覆盖未认证访问、穿越载荷、非法月份、正常月份和登录日志入口。
+
 ---
 
 ## 🔴 严重 (3)

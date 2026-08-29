@@ -8,8 +8,6 @@ require_once __DIR__ . '/function.php';
 
 // 非管理员不可访问!
 if (!is_who_login('admin')) exit('Permission denied');
-// 禁止直接访问
-if (empty($_REQUEST['sign']) || $_REQUEST['sign'] !== md5($config['password'] . date('ymdh'))) exit('Authentication error!');
 
 // 登录日志
 if (isset($_GET['login_log'])) {
@@ -27,6 +25,10 @@ if (isset($_GET['login_log'])) {
 require_once APP_ROOT . '/app/header.php';
 
 if (isset($_POST['logDate'])) {
+    if (!is_string($_POST['logDate']) || !preg_match('/\A\d{4}-(0[1-9]|1[0-2])\z/D', $_POST['logDate'])) {
+        http_response_code(400);
+        exit('Invalid log date');
+    }
     $logFile = APP_ROOT . '/admin/logs/upload/' . $_POST['logDate'] . '.php';
 } else {
     $logFile = APP_ROOT . '/admin/logs/upload/' . date('Y-m') . '.php';
