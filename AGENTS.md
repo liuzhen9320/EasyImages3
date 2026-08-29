@@ -47,7 +47,6 @@ EasyImage is a **database-less, single-user image hosting** PHP application. Use
 | `admin/index.php` | Login page |
 | `admin/manager.php` | File manager (TinyFileManager v2.4.7) |
 | `admin/chart.php` | ECharts statistics dashboard |
-| `admin/filer.php` | File listing/deletion |
 | `admin/terms.php` | Terms management |
 | `admin/version.php` | Read-only version file (`2.8.8`) |
 | `install/` | Installation wizard (`install.php`, `contorl.php`) — creates `install.lock` when done |
@@ -212,7 +211,6 @@ Two engines:
 | `/admin/admin.inc.php` | Settings | Writes to `config.php`, `api_key.php`, `config.guest.php` |
 | `/admin/chart.php` | Statistics | ECharts + custom chart engine (`zui.chart.php`) |
 | `/admin/manager.php` | File manager | TinyFileManager 2.4.7 (`file_manage` config to disable) |
-| `/admin/filer.php` | File operations | Delete, recycle, list |
 | `/admin/terms.php` | Terms management | |
 | `/admin/version.php` | Version info | Plain text file, single line `2.8.8` |
 
