@@ -23,6 +23,23 @@ if (!$config['file_manage']) {
     exit;
 }
 
+$manager_csrf_token = csrf_token();
+if ($manager_csrf_token === '') {
+    http_response_code(500);
+    exit('Unable to initialize file manager security token');
+}
+
+function fm_csrf_field()
+{
+    echo '<input type="hidden" name="_csrf" value="'
+        . htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8') . '">';
+}
+
+function fm_js_value($value)
+{
+    return htmlspecialchars(json_encode($value), ENT_QUOTES, 'UTF-8');
+}
+
 /**
  * H3K | Tiny File Manager V2.4.7
  * CCP Programmers | ccpprogrammers@gmail.com
@@ -258,7 +275,11 @@ $manager_self = isset($_SERVER['PHP_SELF']) ? safe_redirect_url($_SERVER['PHP_SE
 defined('FM_SELF_URL') || define('FM_SELF_URL', $manager_self);
 
 // logout
-if (isset($_GET['logout'])) {
+if (isset($_POST['logout'])) {
+    if (!csrf_validate(isset($_POST['_csrf']) ? $_POST['_csrf'] : null)) {
+        http_response_code(403);
+        exit('Invalid CSRF token');
+    }
     unset($_SESSION[FM_SESSION_ID]['logged']);
     fm_redirect(FM_SELF_URL);
 }
@@ -339,6 +360,7 @@ if ($use_auth) {
                         <div class="card fat <?php echo fm_get_theme(); ?>">
                             <div class="card-body">
                                 <form class="form-signin" action="" method="post" autocomplete="off">
+                                    <?php fm_csrf_field(); ?>
                                     <div class="form-group">
                                        <div class="brand">
                                             <svg version="1.0" xmlns="http://www.w3.org/2000/svg" M1008 width="100%" height="80px" viewBox="0 0 238.000000 140.000000" aria-label="H3K Tiny File Manager">
@@ -414,7 +436,7 @@ define('FM_READONLY', $use_auth && !empty($readonly_users) && isset($_SESSION[FM
 define('FM_IS_WIN', DIRECTORY_SEPARATOR == '\\');
 
 // always use ?p=
-if (!isset($_GET['p']) && empty($_FILES)) {
+if (!isset($_GET['p']) && !isset($_POST['p']) && empty($_FILES)) {
     fm_redirect(FM_SELF_URL . '?p=');
 }
 
@@ -426,7 +448,23 @@ $p = fm_clean_path($p);
 
 // for ajax request - save
 $input = file_get_contents('php://input');
-$_POST = (strpos($input, 'ajax') != FALSE && strpos($input, 'save') != FALSE) ? json_decode($input, true) : $_POST;
+$jsonPost = (strpos($input, 'ajax') !== false && strpos($input, 'save') !== false) ? json_decode($input, true) : null;
+if (is_array($jsonPost)) {
+    $_POST = $jsonPost;
+}
+
+$writeGetRequest = isset($_GET['del']) || isset($_GET['new']) || isset($_GET['ren'])
+    || isset($_GET['unzip']) || (isset($_GET['copy']) && isset($_GET['finish']));
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && $writeGetRequest) {
+    header('Allow: POST');
+    http_response_code(405);
+    exit('File manager write actions require POST');
+}
+if ($_SERVER['REQUEST_METHOD'] === 'POST'
+    && !csrf_validate(isset($_POST['_csrf']) ? $_POST['_csrf'] : null)) {
+    http_response_code(403);
+    exit('Invalid CSRF token');
+}
 
 // instead globals vars
 define('FM_PATH', $p);
@@ -653,8 +691,8 @@ if (isset($_POST['ajax']) && !FM_READONLY) {
 }
 
 // Delete file / folder
-if (isset($_GET['del']) && !FM_READONLY) {
-    $del = str_replace( '/', '', fm_clean_path( $_GET['del'] ) );
+if (isset($_POST['del']) && !FM_READONLY) {
+    $del = str_replace( '/', '', fm_clean_path( $_POST['del'] ) );
     if ($del != '' && $del != '..' && $del != '.') {
         $path = FM_ROOT_PATH;
         if (FM_PATH != '') {
@@ -675,15 +713,15 @@ if (isset($_GET['del']) && !FM_READONLY) {
 }
 
 // Create folder
-if (isset($_GET['new']) && isset($_GET['type']) && !FM_READONLY) {
-    $type = $_GET['type'];
-    $new = str_replace( '/', '', fm_clean_path( strip_tags( $_GET['new'] ) ) );
+if (isset($_POST['new']) && isset($_POST['type']) && !FM_READONLY) {
+    $type = $_POST['type'];
+    $new = str_replace( '/', '', fm_clean_path( strip_tags( $_POST['new'] ) ) );
     if (fm_isvalid_filename($new) && $new != '' && $new != '..' && $new != '.') {
         $path = FM_ROOT_PATH;
         if (FM_PATH != '') {
             $path .= '/' . FM_PATH;
         }
-        if ($_GET['type'] == "file") {
+        if ($_POST['type'] == "file") {
             if (!file_exists($path . '/' . $new)) {
                 if(fm_is_valid_ext($new)) {
                     @fopen($path . '/' . $new, 'w') or die('Cannot open file:  ' . $new);
@@ -710,9 +748,9 @@ if (isset($_GET['new']) && isset($_GET['type']) && !FM_READONLY) {
 }
 
 // Copy folder / file
-if (isset($_GET['copy'], $_GET['finish']) && !FM_READONLY) {
+if (isset($_POST['copy'], $_POST['finish']) && !FM_READONLY) {
     // from
-    $copy = $_GET['copy'];
+    $copy = $_POST['copy'];
     $copy = fm_clean_path($copy);
     // empty path
     if ($copy == '') {
@@ -728,7 +766,7 @@ if (isset($_GET['copy'], $_GET['finish']) && !FM_READONLY) {
     }
     $dest .= '/' . basename($from);
     // move?
-    $move = isset($_GET['move']);
+    $move = isset($_POST['move']);
     // copy/move/duplicate
     if ($from != $dest) {
         $msg_from = trim(FM_PATH . '/' . basename($from), '/');
@@ -841,13 +879,13 @@ if (isset($_POST['file'], $_POST['copy_to'], $_POST['finish']) && !FM_READONLY) 
 }
 
 // Rename
-if (isset($_GET['ren'], $_GET['to']) && !FM_READONLY) {
+if (isset($_POST['ren'], $_POST['to']) && !FM_READONLY) {
     // old name
-    $old = $_GET['ren'];
+    $old = $_POST['ren'];
     $old = fm_clean_path($old);
     $old = str_replace('/', '', $old);
     // new name
-    $new = $_GET['to'];
+    $new = $_POST['to'];
     $new = fm_clean_path(strip_tags($new));
     $new = str_replace('/', '', $new);
     // path
@@ -1084,8 +1122,8 @@ if (isset($_POST['group']) && (isset($_POST['zip']) || isset($_POST['tar'])) && 
 }
 
 // Unpack
-if (isset($_GET['unzip']) && !FM_READONLY) {
-    $unzip = $_GET['unzip'];
+if (isset($_POST['unzip']) && !FM_READONLY) {
+    $unzip = $_POST['unzip'];
     $unzip = fm_clean_path($unzip);
     $unzip = str_replace('/', '', $unzip);
     $isValid = false;
@@ -1112,7 +1150,7 @@ if (isset($_GET['unzip']) && !FM_READONLY) {
     if ($isValid) {
         //to folder
         $tofolder = '';
-        if (isset($_GET['tofolder'])) {
+        if (isset($_POST['tofolder'])) {
             $tofolder = pathinfo($zip_path, PATHINFO_FILENAME);
             if (fm_mkdir($path . '/' . $tofolder, true)) {
                 $path .= '/' . $tofolder;
@@ -1279,7 +1317,8 @@ if (isset($_GET['upload']) && !FM_READONLY) {
                     <?php echo lng('DestinationFolder') ?>: <?php echo fm_enc(fm_convert_win(FM_PATH)) ?>
                 </p>
 
-                <form action="<?php echo htmlspecialchars(FM_SELF_URL) . '?p=' . fm_enc(FM_PATH) ?>" class="dropzone card-tabs-container" id="fileUploader" enctype="multipart/form-data">
+                <form action="<?php echo htmlspecialchars(FM_SELF_URL) . '?p=' . fm_enc(FM_PATH) ?>" method="post" class="dropzone card-tabs-container" id="fileUploader" enctype="multipart/form-data">
+                    <?php fm_csrf_field(); ?>
                     <input type="hidden" name="p" value="<?php echo fm_enc(FM_PATH) ?>">
                     <input type="hidden" name="fullpath" id="fullpath" value="<?php echo fm_enc(FM_PATH) ?>">
                     <div class="fallback">
@@ -1289,6 +1328,7 @@ if (isset($_GET['upload']) && !FM_READONLY) {
 
                 <div class="upload-url-wrapper card-tabs-container hidden" id="urlUploader">
                     <form id="js-form-url-upload" class="form-inline" onsubmit="return upload_from_url(this);" method="POST" action="">
+                        <?php fm_csrf_field(); ?>
                         <input type="hidden" name="type" value="upload" aria-label="hidden" aria-hidden="true">
                         <input type="url" placeholder="URL" name="uploadurl" required class="form-control" style="width: 80%">
                         <button type="submit" class="btn btn-primary ml-3"><?php echo lng('Upload') ?></button>
@@ -1354,6 +1394,7 @@ if (isset($_POST['copy']) && !FM_READONLY) {
             </div>
             <div class="card-body">
                 <form action="" method="post">
+                    <?php fm_csrf_field(); ?>
                     <input type="hidden" name="p" value="<?php echo fm_enc(FM_PATH) ?>">
                     <input type="hidden" name="finish" value="1">
                     <?php
@@ -1398,11 +1439,24 @@ if (isset($_GET['copy']) && !isset($_GET['finish']) && !FM_READONLY) {
             Source path: <?php echo fm_enc(fm_convert_win(FM_ROOT_PATH . '/' . $copy)) ?><br>
             Destination folder: <?php echo fm_enc(fm_convert_win(FM_ROOT_PATH . '/' . FM_PATH)) ?>
         </p>
-        <p>
-            <b><a href="?p=<?php echo urlencode(FM_PATH) ?>&amp;copy=<?php echo urlencode($copy) ?>&amp;finish=1"><i class="fa fa-check-circle"></i> Copy</a></b> &nbsp;
-            <b><a href="?p=<?php echo urlencode(FM_PATH) ?>&amp;copy=<?php echo urlencode($copy) ?>&amp;finish=1&amp;move=1"><i class="fa fa-check-circle"></i> Move</a></b> &nbsp;
+        <div>
+            <form action="" method="post" class="d-inline">
+                <?php fm_csrf_field(); ?>
+                <input type="hidden" name="p" value="<?php echo fm_enc(FM_PATH) ?>">
+                <input type="hidden" name="copy" value="<?php echo fm_enc($copy) ?>">
+                <input type="hidden" name="finish" value="1">
+                <button type="submit" class="btn btn-link p-0"><i class="fa fa-check-circle"></i> Copy</button>
+            </form> &nbsp;
+            <form action="" method="post" class="d-inline">
+                <?php fm_csrf_field(); ?>
+                <input type="hidden" name="p" value="<?php echo fm_enc(FM_PATH) ?>">
+                <input type="hidden" name="copy" value="<?php echo fm_enc($copy) ?>">
+                <input type="hidden" name="finish" value="1">
+                <input type="hidden" name="move" value="1">
+                <button type="submit" class="btn btn-link p-0"><i class="fa fa-check-circle"></i> Move</button>
+            </form> &nbsp;
             <b><a href="?p=<?php echo urlencode(FM_PATH) ?>"><i class="fa fa-times-circle"></i> Cancel</a></b>
-        </p>
+        </div>
         <p><i><?php echo lng('Select folder') ?></i></p>
         <ul class="folders break-word">
             <?php
@@ -1439,6 +1493,7 @@ if (isset($_GET['settings']) && !FM_READONLY) {
             </h6>
             <div class="card-body">
                 <form id="js-settings-form" action="" method="post" data-type="ajax" onsubmit="return save_settings(this)">
+                    <?php fm_csrf_field(); ?>
                     <input type="hidden" name="type" value="settings" aria-label="hidden" aria-hidden="true">
                     <div class="form-group row">
                         <label for="js-language" class="col-sm-3 col-form-label"><?php echo lng('Language') ?></label>
@@ -1584,6 +1639,7 @@ if (isset($_GET['help'])) {
                 <div class="row js-new-pwd hidden mt-2">
                     <div class="col-12">
                         <form class="form-inline" onsubmit="return new_password_hash(this)" method="POST" action="">
+                            <?php fm_csrf_field(); ?>
                             <input type="hidden" name="type" value="pwdhash" aria-label="hidden" aria-hidden="true">
                             <div class="form-group mb-2">
                                 <label for="staticEmail2"><?php echo lng('Generate new password hash') ?></label>
@@ -1718,9 +1774,9 @@ if (isset($_GET['view'])) {
                     if (!FM_READONLY && ($is_zip || $is_gzip) && $filenames !== false) {
                         $zip_name = pathinfo($file_path, PATHINFO_FILENAME);
                         ?>
-                        <b><a href="?p=<?php echo urlencode(FM_PATH) ?>&amp;unzip=<?php echo urlencode($file) ?>"><i class="fa fa-check-circle"></i> <?php echo lng('UnZip') ?></a></b> &nbsp;
-                        <b><a href="?p=<?php echo urlencode(FM_PATH) ?>&amp;unzip=<?php echo urlencode($file) ?>&amp;tofolder=1" title="UnZip to <?php echo fm_enc($zip_name) ?>"><i class="fa fa-check-circle"></i>
-                                <?php echo lng('UnZipToFolder') ?></a></b> &nbsp;
+                        <button type="button" class="btn btn-link p-0" onclick="return fm_post_action({p: <?php echo fm_js_value(FM_PATH) ?>, unzip: <?php echo fm_js_value($file) ?>});"><i class="fa fa-check-circle"></i> <?php echo lng('UnZip') ?></button> &nbsp;
+                        <button type="button" class="btn btn-link p-0" onclick="return fm_post_action({p: <?php echo fm_js_value(FM_PATH) ?>, unzip: <?php echo fm_js_value($file) ?>, tofolder: '1'});" title="UnZip to <?php echo fm_enc($zip_name) ?>"><i class="fa fa-check-circle"></i>
+                                <?php echo lng('UnZipToFolder') ?></button> &nbsp;
                         <?php
                     }
                     if ($is_text && !FM_READONLY) {
@@ -1925,6 +1981,7 @@ if (isset($_GET['chmod']) && !FM_READONLY && !FM_IS_WIN) {
                     Full path: <?php echo $file_path ?><br>
                 </p>
                 <form action="" method="post">
+                    <?php fm_csrf_field(); ?>
                     <input type="hidden" name="p" value="<?php echo fm_enc(FM_PATH) ?>">
                     <input type="hidden" name="chmod" value="<?php echo fm_enc($file) ?>">
 
@@ -1981,6 +2038,7 @@ $all_files_size = 0;
 $tableTheme = (FM_THEME == "dark") ? "text-white bg-dark table-dark" : "bg-white";
 ?>
 <form action="" method="post" class="pt-3">
+    <?php fm_csrf_field(); ?>
     <input type="hidden" name="p" value="<?php echo fm_enc(FM_PATH) ?>">
     <input type="hidden" name="group" value="1">
     <div class="table-responsive">
@@ -2065,8 +2123,8 @@ $tableTheme = (FM_THEME == "dark") ? "text-white bg-dark table-dark" : "bg-white
                         <td><?php echo $owner['name'] . ':' . $group['name'] ?></td>
                     <?php endif; ?>
                     <td class="inline-actions"><?php if (!FM_READONLY): ?>
-                            <a title="<?php echo lng('Delete')?>" href="?p=<?php echo urlencode(FM_PATH) ?>&amp;del=<?php echo urlencode($f) ?>" onclick="return confirm('<?php echo lng('Delete').' '.lng('Folder').'?'; ?>\n \n ( <?php echo urlencode($f) ?> )');"> <i class="fa fa-trash-o" aria-hidden="true"></i></a>
-                            <a title="<?php echo lng('Rename')?>" href="#" onclick="rename('<?php echo fm_enc(addslashes(FM_PATH)) ?>', '<?php echo fm_enc(addslashes($f)) ?>');return false;"><i class="fa fa-pencil-square-o" aria-hidden="true"></i></a>
+                            <a title="<?php echo lng('Delete')?>" href="#" onclick="return delete_item(<?php echo fm_js_value(FM_PATH) ?>, <?php echo fm_js_value($f) ?>, <?php echo fm_js_value(lng('Delete').' '.lng('Folder').'?') ?>);"> <i class="fa fa-trash-o" aria-hidden="true"></i></a>
+                            <a title="<?php echo lng('Rename')?>" href="#" onclick="rename(<?php echo fm_js_value(FM_PATH) ?>, <?php echo fm_js_value($f) ?>);return false;"><i class="fa fa-pencil-square-o" aria-hidden="true"></i></a>
                             <a title="<?php echo lng('CopyTo')?>..." href="?p=&amp;copy=<?php echo urlencode(trim(FM_PATH . '/' . $f, '/')) ?>"><i class="fa fa-files-o" aria-hidden="true"></i></a>
                         <?php endif; ?>
                         <a title="<?php echo lng('DirectLink')?>" href="<?php echo fm_enc(FM_ROOT_URL . (FM_PATH != '' ? '/' . FM_PATH : '') . '/' . $f . '/') ?>" target="_blank"><i class="fa fa-link" aria-hidden="true"></i></a>
@@ -2130,8 +2188,8 @@ $tableTheme = (FM_THEME == "dark") ? "text-white bg-dark table-dark" : "bg-white
                     <td class="inline-actions">
                         <a title="<?php echo lng('Preview') ?>" href="<?php echo $filelink.'&quickView=1'; ?>" data-toggle="lightbox" data-gallery="tiny-gallery" data-title="<?php echo fm_convert_win(fm_enc($f)) ?>" data-max-width="100%" data-width="100%"><i class="fa fa-eye"></i></a>
                         <?php if (!FM_READONLY): ?>
-                            <a title="<?php echo lng('Delete') ?>" href="?p=<?php echo urlencode(FM_PATH) ?>&amp;del=<?php echo urlencode($f) ?>" onclick="return confirm('<?php echo lng('Delete').' '.lng('File').'?'; ?>\n \n ( <?php echo urlencode($f) ?> )');"> <i class="fa fa-trash-o"></i></a>
-                            <a title="<?php echo lng('Rename') ?>" href="#" onclick="rename('<?php echo fm_enc(addslashes(FM_PATH)) ?>', '<?php echo fm_enc(addslashes($f)) ?>');return false;"><i class="fa fa-pencil-square-o"></i></a>
+                            <a title="<?php echo lng('Delete') ?>" href="#" onclick="return delete_item(<?php echo fm_js_value(FM_PATH) ?>, <?php echo fm_js_value($f) ?>, <?php echo fm_js_value(lng('Delete').' '.lng('File').'?') ?>);"> <i class="fa fa-trash-o"></i></a>
+                            <a title="<?php echo lng('Rename') ?>" href="#" onclick="rename(<?php echo fm_js_value(FM_PATH) ?>, <?php echo fm_js_value($f) ?>);return false;"><i class="fa fa-pencil-square-o"></i></a>
                             <a title="<?php echo lng('CopyTo') ?>..."
                                href="?p=<?php echo urlencode(FM_PATH) ?>&amp;copy=<?php echo urlencode(trim(FM_PATH . '/' . $f, '/')) ?>"><i class="fa fa-files-o"></i></a>
                         <?php endif; ?>
@@ -3479,7 +3537,10 @@ function fm_show_nav_path($path)
                             <a title="<?php echo lng('Settings') ?>" class="dropdown-item nav-link" href="?p=<?php echo urlencode(FM_PATH) ?>&amp;settings=1"><i class="fa fa-cog" aria-hidden="true"></i> <?php echo lng('Settings') ?></a>
                             <?php endif ?>
                             <a title="<?php echo lng('Help') ?>" class="dropdown-item nav-link" href="?p=<?php echo urlencode(FM_PATH) ?>&amp;help=2"><i class="fa fa-exclamation-circle" aria-hidden="true"></i> <?php echo lng('Help') ?></a>
-                            <a title="<?php echo lng('Logout') ?>" class="dropdown-item nav-link" href="?logout=1"><i class="fa fa-sign-out" aria-hidden="true"></i> <?php echo lng('Logout') ?></a>
+                            <form action="" method="post" class="m-0">
+                                <?php fm_csrf_field(); ?>
+                                <button title="<?php echo lng('Logout') ?>" class="dropdown-item nav-link" type="submit" name="logout" value="1"><i class="fa fa-sign-out" aria-hidden="true"></i> <?php echo lng('Logout') ?></button>
+                            </form>
                         </div>
                     </li>
                     <?php else: ?>
@@ -3773,7 +3834,7 @@ $isStickyNavBar = $sticky_navbar ? 'navbar-fixed' : 'navbar-normal';
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-outline-primary" data-dismiss="modal"><i class="fa fa-times-circle"></i> <?php echo lng('Cancel') ?></button>
-                    <button type="button" class="btn btn-success" onclick="newfolder('<?php echo fm_enc(FM_PATH) ?>');return false;"><i class="fa fa-check-circle"></i> <?php echo lng('CreateNow') ?></button>
+                    <button type="button" class="btn btn-success" onclick="newfolder(<?php echo fm_js_value(FM_PATH) ?>);return false;"><i class="fa fa-check-circle"></i> <?php echo lng('CreateNow') ?></button>
                 </div>
             </div>
         </div>
@@ -3798,6 +3859,7 @@ $isStickyNavBar = $sticky_navbar ? 'navbar-fixed' : 'navbar-normal';
           </div>
           <div class="modal-body">
             <form action="" method="post">
+                <?php fm_csrf_field(); ?>
                 <div class="lds-facebook"><div></div><div></div><div></div></div>
                 <ul id="search-wrapper">
                     <p class="m-2"><?php echo lng('Search file in folder and subfolders...') ?></p>
@@ -3848,6 +3910,29 @@ $isStickyNavBar = $sticky_navbar ? 'navbar-fixed' : 'navbar-normal';
     <script>hljs.highlightAll(); var isHighlightingEnabled = true;</script>
 <?php endif; ?>
 <script>
+    var fmCsrfToken = <?php echo json_encode(csrf_token()); ?>;
+    function fm_post_action(fields, confirmation) {
+        if (confirmation && !window.confirm(confirmation)) {
+            return false;
+        }
+        var form = document.createElement('form');
+        form.method = 'POST';
+        form.action = <?php echo json_encode(FM_SELF_URL); ?>;
+        fields._csrf = fmCsrfToken;
+        Object.keys(fields).forEach(function(name) {
+            var input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = name;
+            input.value = fields[name];
+            form.appendChild(input);
+        });
+        document.body.appendChild(form);
+        form.submit();
+        return false;
+    }
+    function delete_item(path, name, confirmation) {
+        return fm_post_action({p: path, del: name}, confirmation);
+    }
     $(document).on('click', '[data-toggle="lightbox"]', function(event) {
         event.preventDefault();
         var reInitHighlight = function() { if(typeof isHighlightingEnabled !== "undefined" && isHighlightingEnabled) { setTimeout(function () { $('.ekko-lightbox-container pre code').each(function (i, e) { hljs.highlightBlock(e) }); }, 555); } };
@@ -3865,9 +3950,9 @@ $isStickyNavBar = $sticky_navbar ? 'navbar-fixed' : 'navbar-normal';
     }
     function newfolder(e) {
         var t = document.getElementById("newfilename").value, n = document.querySelector('input[name="newfile"]:checked').value;
-        null !== t && "" !== t && n && (window.location.hash = "#", window.location.search = "p=" + encodeURIComponent(e) + "&new=" + encodeURIComponent(t) + "&type=" + encodeURIComponent(n))
+        null !== t && "" !== t && n && fm_post_action({p: e, new: t, type: n})
     }
-    function rename(e, t) {var n = prompt("New name", t);null !== n && "" !== n && n != t && (window.location.search = "p=" + encodeURIComponent(e) + "&ren=" + encodeURIComponent(t) + "&to=" + encodeURIComponent(n))}
+    function rename(e, t) {var n = prompt("New name", t);null !== n && "" !== n && n != t && fm_post_action({p: e, ren: t, to: n})}
     function change_checkboxes(e, t) { for (var n = e.length - 1; n >= 0; n--) e[n].checked = "boolean" == typeof t ? t : !e[n].checked }
     function get_checkboxes() { for (var e = document.getElementsByName("file[]"), t = [], n = e.length - 1; n >= 0; n--) (e[n].type = "checkbox") && t.push(e[n]); return t }
     function select_all() { change_checkboxes(get_checkboxes(), !0) }
@@ -3876,7 +3961,7 @@ $isStickyNavBar = $sticky_navbar ? 'navbar-fixed' : 'navbar-normal';
     function checkbox_toggle() { var e = get_checkboxes(); e.push(this), change_checkboxes(e) }
     function backup(e, t) { //Create file backup with .bck
         var n = new XMLHttpRequest,
-            a = "path=" + e + "&file=" + t + "&type=backup&ajax=true";
+            a = "path=" + e + "&file=" + t + "&type=backup&ajax=true&_csrf=" + encodeURIComponent(fmCsrfToken);
         return n.open("POST", "", !0), n.setRequestHeader("Content-type", "application/x-www-form-urlencoded"), n.onreadystatechange = function () {
             4 == n.readyState && 200 == n.status && toast(n.responseText)
         }, n.send(a), !1
@@ -3888,7 +3973,7 @@ $isStickyNavBar = $sticky_navbar ? 'navbar-fixed' : 'navbar-normal';
         var n = "ace" == t ? editor.getSession().getValue() : document.getElementById("normal-editor").value;
         if (typeof n !== 'undefined' && n !== null) {
             if (true) {
-                var data = {ajax: true, content: n, type: 'save'};
+                var data = {ajax: true, content: n, type: 'save', _csrf: fmCsrfToken};
 
                 $.ajax({
                     type: "POST",
@@ -3904,6 +3989,8 @@ $isStickyNavBar = $sticky_navbar ? 'navbar-fixed' : 'navbar-normal';
             } else {
                 var a = document.createElement("form");
                 a.setAttribute("method", "POST"), a.setAttribute("action", "");
+                var csrfInput = document.createElement("input");
+                csrfInput.setAttribute("type", "hidden"), csrfInput.setAttribute("name", "_csrf"), csrfInput.setAttribute("value", fmCsrfToken), a.appendChild(csrfInput);
                 var o = document.createElement("textarea");
                 o.setAttribute("type", "textarea"), o.setAttribute("name", "savedata");
                 var c = document.createTextNode(n);
@@ -3966,7 +4053,7 @@ $isStickyNavBar = $sticky_navbar ? 'navbar-fixed' : 'navbar-normal';
     function fm_search() {
         var searchTxt = $("input#advanced-search").val(), searchWrapper = $("ul#search-wrapper"), path = $("#js-search-modal").attr("href"), _html = "", $loader = $("div.lds-facebook");
         if(!!searchTxt && searchTxt.length > 2 && path) {
-            var data = {ajax: true, content: searchTxt, path:path, type: 'search'};
+            var data = {ajax: true, content: searchTxt, path:path, type: 'search', _csrf: fmCsrfToken};
             $.ajax({
                 type: "POST",
                 url: window.location,

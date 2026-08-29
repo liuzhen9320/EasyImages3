@@ -38,3 +38,6 @@ jobs:
 
       - name: Test installation and authentication flow
         run: bash tests/authentication_flow.sh
+
+      - name: Test file manager CSRF protection
+        run: bash tests/file_manager_csrf.sh

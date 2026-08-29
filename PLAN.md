@@ -69,7 +69,7 @@ if ($user === $config['user'] && $password === $config['password']) {
 
 **修复状态**：登录、安装、管理员改密和上传者账号统一使用服务端密码散列函数；浏览器只保存随机 PHP Session ID，旧 SHA-256 配置会在成功登录后自动迁移。CI 已覆盖两阶段安装、首次登录、Session 轮换、旧 Cookie 清除与旧散列迁移。
 
-### 23. 高危 — `admin/manager.php` 的文件写操作仍无 CSRF，且创建/删除/改名使用 GET
+### 23. 高危 — `admin/manager.php` 的文件写操作仍无 CSRF，且创建/删除/改名使用 GET（已修复）
 
 **文件**: `config/config.manager.php:22`, `admin/manager.php:311-392`, `admin/manager.php:443-653`, `admin/manager.php:656-870`
 
@@ -86,6 +86,8 @@ if (isset($_GET['ren'], $_GET['to']) && !FM_READONLY) { /* 改名 */ }
 临时副本实测：仅携带合法管理员 Cookie、完全不提交 CSRF Token，访问 `?p=&type=file&new=manager-csrf-audit-20260829.txt` 成功在 `i/` 创建文件；随后访问 `?p=&del=manager-csrf-audit-20260829.txt` 成功删除，两次响应均为 302。
 
 **修复要求**：所有状态变更统一限制为 POST，并在动作分发前校验项目 CSRF Token；GET 只允许查看和下载。表单、AJAX、分片上传均应使用同一 Token 机制。增加请求方法与 CSRF 的回归测试，并升级长期停留在 2.4.7 的 TinyFileManager，或以项目内受维护的最小文件管理功能替代。
+
+**修复状态**：项目入口对所有文件管理器 POST 请求统一校验 CSRF Token，旧 GET 写操作返回 405；创建、删除、重命名、复制移动、解压、编辑、设置、AJAX 和分片上传均已接入同一 Token。回归测试覆盖普通请求、AJAX 与分片上传的拒绝和成功路径。本项目继续维护现有深度定制文件管理器，避免直接替换上游 2.6 导致认证、存储根目录和静态资源集成回归。
 
 ### 24. 高危 — BootCSS/BootCDN 投毒事件引发全球开发者供应链信任危机（已修复）
 
