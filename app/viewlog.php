@@ -69,7 +69,8 @@ try {
     function ajax_post(url, mode = 'delete') {
         $.post("del.php", {
                 url: url,
-                mode: mode
+                mode: mode,
+                _csrf: <?php echo json_encode(csrf_token()); ?>
             },
             function(data, status) {
                 console.log(data)

@@ -26,10 +26,15 @@ if (!is_who_login('admin')) {
     exit;
 }
 
-// 定义文件位置 
+// 定义文件位置
 $config_file = APP_ROOT . '/config/config.php'; // config.php
 $api_key_file = APP_ROOT . '/config/api_key.php'; // api_key.php
 $guest_config_file = APP_ROOT . '/config/config.guest.php'; // config.guest.php
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !csrf_validate(isset($_POST['_csrf']) ? $_POST['_csrf'] : null)) {
+    http_response_code(403);
+    exit('Invalid CSRF token');
+}
 
 // 修改config配置
 if (isset($_POST['update'])) {
@@ -89,8 +94,8 @@ if (isset($_POST['add_token_id'])) {
 }
 
 // 禁用Token 
-if (isset($_GET['stop_token'])) {
-    $stop_token = $_GET['stop_token'];
+if (isset($_POST['stop_token'])) {
+    $stop_token = $_POST['stop_token'];
     $postArr = array(
         $stop_token => array(
             'id' => 0,
@@ -112,8 +117,8 @@ if (isset($_GET['stop_token'])) {
 }
 
 // 删除Token
-if (isset($_GET['delete_token'])) {
-    unset($tokenList[$_GET['delete_token']]);
+if (isset($_POST['delete_token'])) {
+    unset($tokenList[$_POST['delete_token']]);
     cache_write($api_key_file, $tokenList, 'tokenList');
     echo '
   <script>
@@ -127,8 +132,8 @@ if (isset($_GET['delete_token'])) {
 }
 
 // 禁用用户
-if (isset($_GET['stop_guest'])) {
-    $stop_guest = $_GET['stop_guest'];
+if (isset($_POST['stop_guest'])) {
+    $stop_guest = $_POST['stop_guest'];
     $postArr = array(
         $stop_guest => array(
             'password' => $guestConfig[$stop_guest]['password'],
@@ -151,8 +156,8 @@ if (isset($_GET['stop_guest'])) {
 
 
 // 删除用户
-if (isset($_GET['delete_guest'])) {
-    unset($guestConfig[$_GET['delete_guest']]);
+if (isset($_POST['delete_guest'])) {
+    unset($guestConfig[$_POST['delete_guest']]);
     cache_write($guest_config_file, $guestConfig, 'guestConfig');
     echo '
   <script>
@@ -230,8 +235,8 @@ if (isset($_POST['uploader_form'])) {
 }
 
 // 删除非空目录
-if (isset($_REQUEST['delDir'])) {
-    $delDir = APP_ROOT . $config['path'] . $_REQUEST['delDir'];
+if (isset($_POST['delDir'])) {
+    $delDir = APP_ROOT . $config['path'] . $_POST['delDir'];
     if (deldir($delDir)) {
         echo '
 		<script> new $.zui.Messager("删除成功! ", {
@@ -1512,7 +1517,8 @@ auto_delete(); //定时删除
     function ajax_post(url, mode) {
         $.post("../app/del.php", {
                 url: url,
-                mode: mode
+                mode: mode,
+                _csrf: <?php echo json_encode(csrf_token()); ?>
             },
             function(data, status) {
                 let res = JSON.parse(data);
@@ -1528,6 +1534,26 @@ auto_delete(); //定时删除
                 }
             });
     }
+
+    function admin_post(action, value) {
+        var form = $('<form>', {
+            method: 'post',
+            action: '<?php echo htmlspecialchars($_SERVER['SCRIPT_NAME'], ENT_QUOTES, 'UTF-8'); ?>'
+        });
+        form.append($('<input>', {type: 'hidden', name: action, value: value}));
+        form.append($('<input>', {type: 'hidden', name: '_csrf', value: <?php echo json_encode(csrf_token()); ?>}));
+        form.appendTo('body').submit();
+    }
+
+    $('form[method="post"], form[method="POST"]').each(function() {
+        if (!$(this).find('input[name="_csrf"]').length) {
+            $(this).append($('<input>', {
+                type: 'hidden',
+                name: '_csrf',
+                value: <?php echo json_encode(csrf_token()); ?>
+            }));
+        }
+    });
 
     // 水印字体颜色
     jscolor.presets.myPreset = {
@@ -1675,7 +1701,7 @@ auto_delete(); //定时删除
                         add_time: '<?php echo date('Y-m-d H:i:s', $value['add_time']); ?>',
                         expired: '<?php echo $expired; ?>',
                         number: <?php echo get_file_by_glob(APP_ROOT . $config['path'] . $value['id'], $type = 'number'); ?>,
-                        manage: "<a href='/admin/manager.php?p=<?php echo $value['id']; ?>' target='_blank' class='btn btn-mini btn-success <?php if (!$config['token_path_status']) echo 'disabled'; ?>'>文件</a> <a href='admin.inc.php?stop_token=<?php echo $key; ?>' class='btn btn-mini btn-danger'>禁用</a> <a href='admin.inc.php?delete_token=<?php echo $key; ?>' class='btn btn-mini btn-danger'>删除</a> <a href='#' onclick=\"ajax_post('<?php echo $value['id']; ?>','delDir')\" class='btn btn-mini btn-primary <?php if (!$config['token_path_status']) echo 'disabled'; ?>'>删除上传</a>"
+                        manage: "<a href='/admin/manager.php?p=<?php echo $value['id']; ?>' target='_blank' class='btn btn-mini btn-success <?php if (!$config['token_path_status']) echo 'disabled'; ?>'>文件</a> <a href='#' onclick=\"admin_post('stop_token',decodeURIComponent('<?php echo rawurlencode($key); ?>'));return false;\" class='btn btn-mini btn-danger'>禁用</a> <a href='#' onclick=\"admin_post('delete_token',decodeURIComponent('<?php echo rawurlencode($key); ?>'));return false;\" class='btn btn-mini btn-danger'>删除</a> <a href='#' onclick=\"ajax_post('<?php echo $value['id']; ?>','delDir')\" class='btn btn-mini btn-primary <?php if (!$config['token_path_status']) echo 'disabled'; ?>'>删除上传</a>"
                     },
                 <?php endforeach; ?>
             ]
@@ -1753,7 +1779,7 @@ auto_delete(); //定时删除
                         add_time: '<?php echo date('Y-m-d H:i:s', $v['add_time']); ?>',
                         expired: '<?php echo $expired; ?>',
                         files: <?php echo get_file_by_glob(APP_ROOT . $config['path'] . $k, $type = 'number'); ?>,
-                        manage: "<a href='/admin/manager.php?p=<?php echo $k; ?>' target='_blank' class='btn btn-mini btn-success <?php if (!$config['guest_path_status']) echo 'disabled'; ?>'>文件</a> <a href='admin.inc.php?stop_guest=<?php echo $k; ?>' class='btn btn-mini btn-danger'>禁用</a> <a class='btn btn-mini btn-danger' href='admin.inc.php?delete_guest=<?php echo $k; ?>'>删除</a> <a class='btn btn-mini btn-primary <?php if (!$config['guest_path_status']) echo 'disabled'; ?>' href='#' onclick=\"ajax_post('<?php echo $k; ?>','delDir')\">删除上传</a>",
+                        manage: "<a href='/admin/manager.php?p=<?php echo $k; ?>' target='_blank' class='btn btn-mini btn-success <?php if (!$config['guest_path_status']) echo 'disabled'; ?>'>文件</a> <a href='#' onclick=\"admin_post('stop_guest',decodeURIComponent('<?php echo rawurlencode($k); ?>'));return false;\" class='btn btn-mini btn-danger'>禁用</a> <a class='btn btn-mini btn-danger' href='#' onclick=\"admin_post('delete_guest',decodeURIComponent('<?php echo rawurlencode($k); ?>'));return false;\">删除</a> <a class='btn btn-mini btn-primary <?php if (!$config['guest_path_status']) echo 'disabled'; ?>' href='#' onclick=\"ajax_post('<?php echo $k; ?>','delDir')\">删除上传</a>",
                     },
                 <?php endforeach; ?>
             ]

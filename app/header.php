@@ -1,6 +1,11 @@
+<?php
+require_once __DIR__ . '/function.php';
+if (is_who_login('admin')) {
+	csrf_token();
+}
+?>
 <!DOCTYPE html>
 <html lang="zh-cn">
-<?php require_once __DIR__ . '/function.php'; ?>
 
 <head>
 	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">

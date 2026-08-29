@@ -276,7 +276,8 @@ if ($config['ad_top']) echo $config['ad_top_info'];
               console.log(check_val);
             }
             $.post("del.php", {
-              'recycle_url_array': check_val
+              'recycle_url_array': check_val,
+              '_csrf': <?php echo json_encode(csrf_token()); ?>
             }, );
             new $.zui.Messager("放入回收站成功", {
               type: "success", // 定义颜色主题 
@@ -323,7 +324,8 @@ if ($config['ad_top']) echo $config['ad_top_info'];
               console.log(check_val);
             }
             $.post("del.php", {
-                'del_url_array': check_val
+                'del_url_array': check_val,
+                '_csrf': <?php echo json_encode(csrf_token()); ?>
               },
               function(data) {
                 if (data.search('success') > 0) {

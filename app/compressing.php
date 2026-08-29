@@ -12,6 +12,10 @@ if (!is_who_login('admin')) {
     echo '<div class="alert alert-info">未登陆~~</div>';
     exit(require_once APP_ROOT . '/app/footer.php');
 }
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !csrf_validate(isset($_POST['_csrf']) ? $_POST['_csrf'] : null)) {
+    http_response_code(403);
+    exit('Invalid CSRF token');
+}
 // 文件夹压缩
 if (isset($_POST['folder'])) {
 

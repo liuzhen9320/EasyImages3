@@ -4,6 +4,58 @@ require_once __DIR__ . '/WaterMask.php';
 require_once APP_ROOT . '/config/config.guest.php';
 
 /**
+ * Start the session used for administrator CSRF protection.
+ */
+function csrf_session_start()
+{
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        return true;
+    }
+
+    if (headers_sent()) {
+        return false;
+    }
+
+    return session_start();
+}
+
+/**
+ * Return the CSRF token associated with the current session.
+ */
+function csrf_token()
+{
+    if (!csrf_session_start()) {
+        return '';
+    }
+
+    if (empty($_SESSION['_csrf_token'])) {
+        if (function_exists('random_bytes')) {
+            $random = random_bytes(32);
+        } else {
+            $random = openssl_random_pseudo_bytes(32);
+        }
+        if ($random === false) {
+            return '';
+        }
+        $_SESSION['_csrf_token'] = bin2hex($random);
+    }
+
+    return $_SESSION['_csrf_token'];
+}
+
+/**
+ * Validate a request CSRF token without accepting it from the query string.
+ */
+function csrf_validate($token)
+{
+    if (!is_string($token) || !csrf_session_start() || empty($_SESSION['_csrf_token'])) {
+        return false;
+    }
+
+    return hash_equals($_SESSION['_csrf_token'], $token);
+}
+
+/**
  * 判断GIF图片是否为动态
  * @param $filename string 文件
  * @return int 是|否

@@ -75,6 +75,15 @@ if (isset($_GET['hash'])) {
 
 // 非管理员不可访问
 if (!is_who_login('admin')) exit('Permission denied');
+if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !csrf_validate(isset($_POST['_csrf']) ? $_POST['_csrf'] : null)) {
+    http_response_code(403);
+    exit(json_encode(array(
+        'code' => 403,
+        'msg' => 'Invalid CSRF token',
+        'type' => 'danger',
+        'icon' => 'exclamation-sign'
+    ), JSON_UNESCAPED_UNICODE));
+}
 
 // 广场 - 批量删除文件
 if (isset($_POST['del_url_array'])) {
